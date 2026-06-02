@@ -50,14 +50,14 @@
 }
 
 .toast-success {
-  border-color: rgba(124, 112, 255, 0.42);
-  background: linear-gradient(160deg, rgba(124, 112, 255, 0.1), var(--surface-2));
+  border-color: rgba(91, 108, 255, 0.42);
+  background: linear-gradient(160deg, rgba(91, 108, 255, 0.1), var(--surface-2));
 }
 
 .toast-success .toast-icon {
   color: #ffffff;
   background: var(--green);
-  box-shadow: 0 0 18px rgba(124, 112, 255, 0.4);
+  box-shadow: 0 0 18px rgba(91, 108, 255, 0.4);
 }
 
 .toast-error {
@@ -80,7 +80,7 @@
 }
 
 .toast-info {
-  border-color: rgba(124, 112, 255, 0.4);
+  border-color: rgba(91, 108, 255, 0.4);
 }
 
 .toast-info .toast-icon {

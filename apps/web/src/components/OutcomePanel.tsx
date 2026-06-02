@@ -1,20 +1,16 @@
 import { motion } from "framer-motion";
 import type { UseCase } from "../config/useCases";
 
+export interface OutcomePeer {
+  /** display label (e.g. "Member alpha" or shortened on-chain address) */
+  name: string;
+  value: number;
+}
+
 function ballotBucket(value: number): "yes" | "no" | "abstain" {
   if (value >= 75) return "yes";
   if (value <= 25) return "no";
   return "abstain";
-}
-
-function classifyBallots(useCase: UseCase, userValue: number) {
-  const all = [...useCase.cohort.map((p) => p.value), userValue];
-  const counts = { yes: 0, no: 0, abstain: 0 };
-  for (const v of all) {
-    counts[ballotBucket(v)] += 1;
-  }
-  const total = all.length;
-  return { counts, total };
 }
 
 function formatPct(n: number, total: number): string {
@@ -22,8 +18,20 @@ function formatPct(n: number, total: number): string {
   return `${Math.round((n / total) * 100)}%`;
 }
 
-function TallyOutcome({ useCase, userValue }: { useCase: UseCase; userValue: number }) {
-  const { counts, total } = classifyBallots(useCase, userValue);
+function TallyOutcome({
+  useCase,
+  peers,
+  userValue,
+}: {
+  useCase: UseCase;
+  peers: OutcomePeer[];
+  userValue: number;
+}) {
+  void useCase;
+  const all = [...peers.map((p) => p.value), userValue];
+  const counts = { yes: 0, no: 0, abstain: 0 };
+  for (const v of all) counts[ballotBucket(v)] += 1;
+  const total = all.length;
   const winner = (Object.entries(counts) as Array<["yes" | "no" | "abstain", number]>)
     .sort((a, b) => b[1] - a[1])[0];
   const winnerLabel = winner[0] === "yes" ? "Yes" : winner[0] === "no" ? "No" : "Abstain";
@@ -41,8 +49,12 @@ function TallyOutcome({ useCase, userValue }: { useCase: UseCase; userValue: num
   return (
     <div className="outcome-tally">
       <div className="outcome-headline">
-        <span>Proposal {winner[0] === "yes" ? "passes" : winner[0] === "no" ? "fails" : "deadlocks"}</span>
-        <strong>{winnerLabel} · {winner[1]} / {total}</strong>
+        <span>
+          Proposal {winner[0] === "yes" ? "passes" : winner[0] === "no" ? "fails" : "deadlocks"}
+        </span>
+        <strong>
+          {winnerLabel} · {winner[1]} / {total}
+        </strong>
       </div>
       <ul className="tally-bars">
         {rows.map((row, i) => {
@@ -52,7 +64,9 @@ function TallyOutcome({ useCase, userValue }: { useCase: UseCase; userValue: num
             <li key={row.key} className={`tally-row ${row.tone}`}>
               <div className="tally-label">
                 <span>{row.label}</span>
-                <b>{value} · {formatPct(value, total)}</b>
+                <b>
+                  {value} · {formatPct(value, total)}
+                </b>
               </div>
               <div className="tally-track">
                 <motion.div
@@ -67,17 +81,25 @@ function TallyOutcome({ useCase, userValue }: { useCase: UseCase; userValue: num
         })}
       </ul>
       <p className="outcome-foot">
-        Drand R verifies all {total} ballots opened from the same sealed set — no one could see the
-        running tally before reveal.
+        Drand R verifies all {total} ballots opened from the same sealed set — no one could see
+        the running tally before reveal.
       </p>
     </div>
   );
 }
 
-function LeaderboardOutcome({ useCase, userValue }: { useCase: UseCase; userValue: number }) {
+function LeaderboardOutcome({
+  useCase,
+  peers,
+  userValue,
+}: {
+  useCase: UseCase;
+  peers: OutcomePeer[];
+  userValue: number;
+}) {
   type Row = { name: string; value: number; isYou: boolean };
   const rows: Row[] = [
-    ...useCase.cohort.map((p) => ({ name: p.name, value: p.value, isYou: false })),
+    ...peers.map((p) => ({ name: p.name, value: p.value, isYou: false })),
     { name: "You", value: userValue, isYou: true },
   ].sort((a, b) => b.value - a.value);
   const avg = rows.reduce((acc, r) => acc + r.value, 0) / rows.length;
@@ -87,13 +109,18 @@ function LeaderboardOutcome({ useCase, userValue }: { useCase: UseCase; userValu
       <div className="outcome-headline">
         <span>Final ranking</span>
         <strong>
-          Average {avg.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} / 10
+          Average{" "}
+          {avg.toLocaleString(undefined, {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+          })}{" "}
+          / 10
         </strong>
       </div>
       <ol className="leaderboard">
         {rows.map((row, i) => (
           <motion.li
-            key={row.name}
+            key={`${row.name}-${i}`}
             className={`leaderboard-row ${row.isYou ? "you" : ""} ${i === 0 ? "top" : ""}`}
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
@@ -112,10 +139,18 @@ function LeaderboardOutcome({ useCase, userValue }: { useCase: UseCase; userValu
   );
 }
 
-function HighestOutcome({ useCase, userValue }: { useCase: UseCase; userValue: number }) {
+function HighestOutcome({
+  useCase,
+  peers,
+  userValue,
+}: {
+  useCase: UseCase;
+  peers: OutcomePeer[];
+  userValue: number;
+}) {
   type Row = { name: string; value: number; isYou: boolean };
   const rows: Row[] = [
-    ...useCase.cohort.map((p) => ({ name: p.name, value: p.value, isYou: false })),
+    ...peers.map((p) => ({ name: p.name, value: p.value, isYou: false })),
     { name: "You", value: userValue, isYou: true },
   ].sort((a, b) => b.value - a.value);
   const winner = rows[0];
@@ -132,7 +167,7 @@ function HighestOutcome({ useCase, userValue }: { useCase: UseCase; userValue: n
           const pct = max === 0 ? 0 : (row.value / max) * 100;
           return (
             <li
-              key={row.name}
+              key={`${row.name}-${i}`}
               className={`bid-row ${row.isYou ? "you" : ""} ${i === 0 ? "top" : ""}`}
             >
               <div className="bid-label">
@@ -159,10 +194,18 @@ function HighestOutcome({ useCase, userValue }: { useCase: UseCase; userValue: n
   );
 }
 
-function DistributionOutcome({ useCase, userValue }: { useCase: UseCase; userValue: number }) {
+function DistributionOutcome({
+  useCase,
+  peers,
+  userValue,
+}: {
+  useCase: UseCase;
+  peers: OutcomePeer[];
+  userValue: number;
+}) {
   type Row = { name: string; value: number; isYou: boolean };
   const rows: Row[] = [
-    ...useCase.cohort.map((p) => ({ name: p.name, value: p.value, isYou: false })),
+    ...peers.map((p) => ({ name: p.name, value: p.value, isYou: false })),
     { name: "You", value: userValue, isYou: true },
   ];
   const total = rows.reduce((acc, r) => acc + r.value, 0);
@@ -178,7 +221,7 @@ function DistributionOutcome({ useCase, userValue }: { useCase: UseCase; userVal
           const pct = total === 0 ? 0 : (row.value / total) * 100;
           return (
             <motion.div
-              key={row.name}
+              key={`${row.name}-${i}`}
               className={`distribution-segment ${row.isYou ? "you" : ""}`}
               initial={{ width: 0 }}
               animate={{ width: `${pct}%` }}
@@ -191,10 +234,10 @@ function DistributionOutcome({ useCase, userValue }: { useCase: UseCase; userVal
         })}
       </div>
       <ul className="distribution-list">
-        {rows.map((row) => {
+        {rows.map((row, i) => {
           const pct = total === 0 ? 0 : (row.value / total) * 100;
           return (
-            <li key={row.name} className={row.isYou ? "you" : ""}>
+            <li key={`${row.name}-${i}`} className={row.isYou ? "you" : ""}>
               <span>{row.name}</span>
               <b>{useCase.formatValue(row.value)}</b>
               <small>{pct.toFixed(1)}%</small>
@@ -213,10 +256,16 @@ function DistributionOutcome({ useCase, userValue }: { useCase: UseCase; userVal
 export function OutcomePanel({
   useCase,
   userValue,
+  peers,
+  isReal,
 }: {
   useCase: UseCase;
   /** user's revealed numeric value */
   userValue: number;
+  /** participants other than the user (real on-chain or simulated cohort) */
+  peers: OutcomePeer[];
+  /** whether `peers` were sourced from real on-chain bidders */
+  isReal: boolean;
 }) {
   return (
     <motion.section
@@ -226,17 +275,19 @@ export function OutcomePanel({
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
     >
       <header>
-        <span className="outcome-badge">Round revealed</span>
+        <span className="outcome-badge">
+          {isReal ? "On-chain reveal" : "Round revealed"}
+        </span>
         <h2>{useCase.tagline} · final result</h2>
       </header>
       {useCase.outcomeKind === "tally" ? (
-        <TallyOutcome useCase={useCase} userValue={userValue} />
+        <TallyOutcome useCase={useCase} peers={peers} userValue={userValue} />
       ) : useCase.outcomeKind === "leaderboard" ? (
-        <LeaderboardOutcome useCase={useCase} userValue={userValue} />
+        <LeaderboardOutcome useCase={useCase} peers={peers} userValue={userValue} />
       ) : useCase.outcomeKind === "highest" ? (
-        <HighestOutcome useCase={useCase} userValue={userValue} />
+        <HighestOutcome useCase={useCase} peers={peers} userValue={userValue} />
       ) : (
-        <DistributionOutcome useCase={useCase} userValue={userValue} />
+        <DistributionOutcome useCase={useCase} peers={peers} userValue={userValue} />
       )}
     </motion.section>
   );

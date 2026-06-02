@@ -213,6 +213,58 @@ export function useRoundSession(active: UseCase, defaultRoundId: bigint | null) 
     }
   }
 
+  async function joinRound(idStr: string) {
+    if (!contract || !address) {
+      toast.push("error", "Wallet not ready", "Connect Freighter first");
+      return;
+    }
+    const id = active.id;
+    const trimmed = idStr.trim();
+    if (!trimmed) {
+      toast.push("error", "Round id required", "Paste an existing round number");
+      return;
+    }
+    let parsedId: bigint;
+    try {
+      parsedId = BigInt(trimmed);
+    } catch {
+      toast.push("error", "Invalid round id", "Round ids are numeric (e.g. 42)");
+      return;
+    }
+    const workingId = toast.push("working", "Joining round…", `Round #${parsedId}`);
+    setStatus("working");
+    try {
+      const roundTx = await contract.get_round({ round_id: parsedId });
+      const round = roundTx.result.unwrap();
+      if (round.status.tag !== "Open") {
+        throw new Error(`Round #${parsedId} is ${round.status.tag} — commit window has closed.`);
+      }
+      const commitDeadline = Number(round.commit_deadline);
+      const now = Math.floor(Date.now() / 1000);
+      if (commitDeadline <= now) {
+        throw new Error(`Round #${parsedId} commit window has already closed.`);
+      }
+      updateSession(id, {
+        roundId: parsedId,
+        auditorPublicKey: new Uint8Array(round.auditor_pubkey),
+        roundCreatedAt: Date.now(),
+      });
+      setStatus("ok");
+      const remaining = commitDeadline - now;
+      const msg = `Round #${parsedId} · ${remaining}s left to commit`;
+      push(`Joined existing round #${parsedId}.`, id);
+      toast.dismiss(workingId);
+      toast.push("success", "Joined round", msg);
+      await refresh(parsedId, id);
+    } catch (error) {
+      const msg = displayError(error);
+      setStatus("error");
+      push(msg, id);
+      toast.dismiss(workingId);
+      toast.push("error", "Could not join round", msg);
+    }
+  }
+
   async function commitEntry() {
     if (!contract || !address || roundId == null) return;
     const id = active.id;
@@ -360,6 +412,7 @@ export function useRoundSession(active: UseCase, defaultRoundId: bigint | null) 
     revealProgress,
     connect,
     createRound,
+    joinRound,
     commitEntry,
     openAndReveal,
     refresh,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AgentActivity, KeeperPanel, X402Logs } from "../components/AgentPanels";
 import { AttackDemo } from "../components/AttackDemo";
@@ -89,6 +89,7 @@ function PhaseGuide(props: {
   onEntryChange: (v: number) => void;
   connect: () => void;
   createRound: () => void;
+  joinRound: (id: string) => void;
   commitEntry: () => void;
   openAndReveal: () => void;
 }) {
@@ -107,9 +108,11 @@ function PhaseGuide(props: {
     onEntryChange,
     connect,
     createRound,
+    joinRound,
     commitEntry,
     openAndReveal,
   } = props;
+  const [joinId, setJoinId] = useState("");
 
   const working = status === "working";
   const commitSeconds = commitSecondsRemaining ?? 0;
@@ -128,6 +131,7 @@ function PhaseGuide(props: {
   let cta = connect;
   let ctaDisabled = working;
   let showInput = false;
+  let showJoin = false;
 
   if (address && !canUseContract) {
     tone = "danger";
@@ -141,10 +145,11 @@ function PhaseGuide(props: {
     tone = "ready";
     eyebrow = "Step 1 · sealed round";
     title = "Create a round";
-    detail = `We'll open a ${LIVE_COMMIT_WINDOW_SECONDS}-second commit window, then wait for Drand R to publish.`;
+    detail = `Open a ${LIVE_COMMIT_WINDOW_SECONDS}-second commit window — or join an existing round id and submit your sealed entry alongside other bidders.`;
     timerValue = `~${LIVE_COMMIT_WINDOW_SECONDS}s window`;
     ctaLabel = "Create round";
     cta = createRound;
+    showJoin = true;
   } else if (roundId != null && !committed && !commitClosed) {
     tone = commitSeconds <= 6 ? "danger" : "urgent";
     eyebrow = `Step 2 · ${useCase.actorRole} commit`;
@@ -333,6 +338,51 @@ function PhaseGuide(props: {
             </small>
           </motion.div>
         ) : null}
+
+        {showJoin ? (
+          <motion.div
+            className="join-form"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: 0.05 }}
+          >
+            <div className="join-form-divider" aria-hidden="true">
+              <span>or</span>
+            </div>
+            <label htmlFor="join-round-id">Join an existing round</label>
+            <p className="join-form-helper">
+              Have a round id from a teammate? Drop it here to commit alongside the existing
+              bidders without creating a fresh round.
+            </p>
+            <div className="join-form-row">
+              <div className="join-input">
+                <span className="join-input-prefix">#</span>
+                <input
+                  id="join-round-id"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="round id"
+                  value={joinId}
+                  onChange={(e) => setJoinId(e.target.value.replace(/[^0-9]/g, ""))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && joinId.trim() && !working) {
+                      joinRound(joinId);
+                    }
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={() => joinRound(joinId)}
+                disabled={!joinId.trim() || working}
+              >
+                Join round
+              </button>
+            </div>
+          </motion.div>
+        ) : null}
       </div>
 
       <div className="phase-aside">
@@ -459,6 +509,7 @@ function LivePanel({
     revealProgress,
     connect,
     createRound,
+    joinRound,
     commitEntry,
     openAndReveal,
     refresh,
@@ -472,6 +523,29 @@ function LivePanel({
     }
     lastRevealedRef.current = revealedCount;
   }, [revealedCount, onCelebrate]);
+
+  /**
+   * Real on-chain peers participating in this round, derived from the
+   * contract's bidder list. Excludes the user's own address; if there is at
+   * least one other bidder we'll show real peers instead of simulated ones.
+   */
+  const realPeers = useMemo(() => {
+    if (!live || !address) return [];
+    return live.bidders
+      .filter((bidder) => bidder !== address)
+      .map((bidder) => {
+        const state = live.bidStates[bidder];
+        const revealedRaw =
+          state?.revealed_value != null ? Number(state.revealed_value) : null;
+        const value = revealedRaw != null ? revealedRaw / 100_000 : null;
+        return {
+          address: bidder,
+          sealed: Boolean(state),
+          revealed: state?.revealed_value != null,
+          value,
+        };
+      });
+  }, [live, address]);
 
   return (
     <>
@@ -522,6 +596,7 @@ function LivePanel({
         onEntryChange={setEntryValue}
         connect={() => void connect()}
         createRound={() => void createRound()}
+        joinRound={(id) => void joinRound(id)}
         commitEntry={() => void commitEntry()}
         openAndReveal={() => void openAndReveal()}
       />
@@ -547,6 +622,8 @@ function LivePanel({
             revealed={revealedCount > 0}
             userCommitted={Boolean(commitValue)}
             userValue={commitValue == null ? null : entryValue}
+            realPeers={realPeers}
+            roundId={roundId}
           />
         )}
         <FeedbackPanel
@@ -557,7 +634,24 @@ function LivePanel({
         />
       </div>
 
-      {revealedCount > 0 ? <OutcomePanel useCase={active} userValue={entryValue} /> : null}
+      {revealedCount > 0 ? (
+        (() => {
+          const useReal = realPeers.length > 0;
+          const peers = useReal
+            ? realPeers
+                .filter((p) => p.revealed && p.value != null)
+                .map((p) => ({ name: shortAddr(p.address, 5), value: p.value as number }))
+            : active.cohort.map((p) => ({ name: p.name, value: p.value }));
+          return (
+            <OutcomePanel
+              useCase={active}
+              userValue={entryValue}
+              peers={peers}
+              isReal={useReal}
+            />
+          );
+        })()
+      ) : null}
 
       <section className="live-state">
         <div>

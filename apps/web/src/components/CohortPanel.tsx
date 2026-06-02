@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Peer, UseCase } from "../config/useCases";
+import { shortAddr } from "../lib/format";
 
 type PeerState = "pending" | "sealing" | "sealed" | "revealed";
 
@@ -18,13 +19,86 @@ function peerStateAt(
   return "sealed";
 }
 
+export interface RealPeer {
+  address: string;
+  sealed: boolean;
+  revealed: boolean;
+  /** raw decoded value (entry-space, e.g. 8.5 for grants score) */
+  value: number | null;
+}
+
 interface CohortPanelProps {
   useCase: UseCase;
   roundCreatedAt: number | null;
   revealed: boolean;
-  /** user's own committed value (after their commit), used to render the "you" row */
+  /** user's own committed flag */
   userCommitted: boolean;
   userValue: number | null;
+  /** on-chain peers (others in this round) — when present we render real flow */
+  realPeers: RealPeer[];
+  roundId: bigint | null;
+}
+
+function pasteRoundId(roundId: bigint | null): string {
+  return roundId == null ? "" : `#${roundId}`;
+}
+
+function CohortValueRevealed({ label }: { label: string }) {
+  return (
+    <motion.span
+      key="revealed"
+      className="cohort-value revealed"
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      {label}
+    </motion.span>
+  );
+}
+
+function CohortValueSealed() {
+  return (
+    <motion.span
+      key="sealed"
+      className="cohort-value sealed"
+      initial={{ opacity: 0, scale: 0.94 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ type: "spring", stiffness: 320, damping: 22 }}
+    >
+      ●●●●●●
+    </motion.span>
+  );
+}
+
+function CohortValueSealing() {
+  return (
+    <motion.span
+      key="sealing"
+      className="cohort-value sealing"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      sealing…
+    </motion.span>
+  );
+}
+
+function CohortValuePending({ text = "idle" }: { text?: string }) {
+  return (
+    <motion.span
+      key="pending"
+      className="cohort-value pending"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      {text}
+    </motion.span>
+  );
 }
 
 export function CohortPanel({
@@ -33,32 +107,40 @@ export function CohortPanel({
   revealed,
   userCommitted,
   userValue,
+  realPeers,
+  roundId,
 }: CohortPanelProps) {
   const [now, setNow] = useState(() => Date.now());
+  const useReal = realPeers.length > 0;
 
   useEffect(() => {
-    if (roundCreatedAt == null || revealed) return;
+    if (useReal || roundCreatedAt == null || revealed) return;
     const id = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(id);
-  }, [roundCreatedAt, revealed]);
+  }, [useReal, roundCreatedAt, revealed]);
 
-  const peers = useCase.cohort;
-  const sealedCount = peers.filter(
+  const simulatedPeers = useCase.cohort;
+  const simulatedSealed = simulatedPeers.filter(
     (peer) => peerStateAt(peer, roundCreatedAt, now, revealed) !== "pending",
   ).length;
-  const totalCount = peers.length + 1;
-  const sealedTotal = sealedCount + (userCommitted ? 1 : 0);
+
+  const totalCount = useReal ? realPeers.length + 1 : simulatedPeers.length + 1;
+  const sealedTotal = useReal
+    ? realPeers.filter((p) => p.sealed).length + (userCommitted ? 1 : 0)
+    : simulatedSealed + (userCommitted ? 1 : 0);
+
+  const headerLabel = useReal ? "On-chain cohort" : "Sealed cohort";
+  const headerDescription = useReal
+    ? `Live on-chain bidders for round ${pasteRoundId(roundId)}. Every row is a real Stellar address committing to the same Drand R.`
+    : "Each row is encrypted to Drand R until reveal. Co-bidders are simulated for the demo; your commit is real on-chain.";
 
   return (
     <section className="cohort-panel">
       <header className="cohort-head">
         <div>
-          <span className="cohort-eyebrow">Sealed cohort</span>
+          <span className="cohort-eyebrow">{headerLabel}</span>
           <h3>Round participants</h3>
-          <p>
-            Each row is encrypted to Drand R until reveal. Co-bidders are simulated for the
-            demo; your commit is real on-chain.
-          </p>
+          <p>{headerDescription}</p>
         </div>
         <div className="cohort-counter">
           <span>Sealed</span>
@@ -69,8 +151,9 @@ export function CohortPanel({
       </header>
 
       <ul className="cohort-list">
-        {/* the user's own row first */}
-        <li className={`cohort-row you ${userCommitted ? "sealed" : "pending"} ${revealed ? "revealed" : ""}`}>
+        <li
+          className={`cohort-row you ${userCommitted ? "sealed" : "pending"} ${revealed ? "revealed" : ""}`}
+        >
           <div className="cohort-name">
             <span className="cohort-dot" aria-hidden="true" />
             <strong>You</strong>
@@ -79,100 +162,69 @@ export function CohortPanel({
           <div className="cohort-state">
             <AnimatePresence mode="wait" initial={false}>
               {revealed && userValue != null ? (
-                <motion.span
-                  key="revealed"
-                  className="cohort-value revealed"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  {useCase.formatValue(userValue)}
-                </motion.span>
+                <CohortValueRevealed label={useCase.formatValue(userValue)} />
               ) : userCommitted ? (
-                <motion.span
-                  key="sealed"
-                  className="cohort-value sealed"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  ●●●●●●
-                </motion.span>
+                <CohortValueSealed />
               ) : (
-                <motion.span
-                  key="pending"
-                  className="cohort-value pending"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  awaiting commit…
-                </motion.span>
+                <CohortValuePending text="awaiting commit…" />
               )}
             </AnimatePresence>
           </div>
         </li>
 
-        {peers.map((peer) => {
-          const state = peerStateAt(peer, roundCreatedAt, now, revealed);
-          return (
-            <li key={peer.name} className={`cohort-row ${state}`}>
-              <div className="cohort-name">
-                <span className="cohort-dot" aria-hidden="true" />
-                <strong>{peer.name}</strong>
-                <small>demo cohort</small>
-              </div>
-              <div className="cohort-state">
-                <AnimatePresence mode="wait" initial={false}>
-                  {state === "revealed" ? (
-                    <motion.span
-                      key="revealed"
-                      className="cohort-value revealed"
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      {useCase.formatValue(peer.value)}
-                    </motion.span>
-                  ) : state === "sealed" ? (
-                    <motion.span
-                      key="sealed"
-                      className="cohort-value sealed"
-                      initial={{ opacity: 0, scale: 0.94 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ type: "spring", stiffness: 320, damping: 22 }}
-                    >
-                      ●●●●●●
-                    </motion.span>
-                  ) : state === "sealing" ? (
-                    <motion.span
-                      key="sealing"
-                      className="cohort-value sealing"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                    >
-                      sealing…
-                    </motion.span>
-                  ) : (
-                    <motion.span
-                      key="pending"
-                      className="cohort-value pending"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                    >
-                      idle
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </div>
-            </li>
-          );
-        })}
+        {useReal
+          ? realPeers.map((peer) => {
+              const state: PeerState = peer.revealed
+                ? "revealed"
+                : peer.sealed
+                  ? "sealed"
+                  : "pending";
+              return (
+                <li key={peer.address} className={`cohort-row ${state}`}>
+                  <div className="cohort-name">
+                    <span className="cohort-dot" aria-hidden="true" />
+                    <strong>{shortAddr(peer.address, 5)}</strong>
+                    <small>on-chain bidder</small>
+                  </div>
+                  <div className="cohort-state">
+                    <AnimatePresence mode="wait" initial={false}>
+                      {state === "revealed" && peer.value != null ? (
+                        <CohortValueRevealed label={useCase.formatValue(peer.value)} />
+                      ) : state === "sealed" ? (
+                        <CohortValueSealed />
+                      ) : (
+                        <CohortValuePending text="not yet committed" />
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </li>
+              );
+            })
+          : simulatedPeers.map((peer) => {
+              const state = peerStateAt(peer, roundCreatedAt, now, revealed);
+              return (
+                <li key={peer.name} className={`cohort-row ${state}`}>
+                  <div className="cohort-name">
+                    <span className="cohort-dot" aria-hidden="true" />
+                    <strong>{peer.name}</strong>
+                    <small>demo cohort</small>
+                  </div>
+                  <div className="cohort-state">
+                    <AnimatePresence mode="wait" initial={false}>
+                      {state === "revealed" ? (
+                        <CohortValueRevealed label={useCase.formatValue(peer.value)} />
+                      ) : state === "sealed" ? (
+                        <CohortValueSealed />
+                      ) : state === "sealing" ? (
+                        <CohortValueSealing />
+                      ) : (
+                        <CohortValuePending />
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </li>
+              );
+            })}
       </ul>
     </section>
   );
