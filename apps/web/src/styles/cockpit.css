@@ -850,9 +850,9 @@
 }
 
 .comparison-card.leaky {
-  border-color: rgba(255, 119, 111, 0.32);
+  border-color: rgba(255, 211, 106, 0.28);
   background:
-    radial-gradient(ellipse 80% 60% at 100% 0%, rgba(255, 119, 111, 0.08), transparent 60%),
+    radial-gradient(ellipse 80% 60% at 100% 0%, rgba(255, 211, 106, 0.08), transparent 60%),
     var(--surface-1);
 }
 
@@ -877,9 +877,9 @@
 }
 
 .comparison-card.leaky > span {
-  color: var(--red);
-  border: 1px solid rgba(255, 119, 111, 0.4);
-  background: rgba(255, 119, 111, 0.08);
+  color: var(--amber);
+  border: 1px solid rgba(255, 211, 106, 0.36);
+  background: rgba(255, 211, 106, 0.06);
 }
 
 .comparison-card.sealed > span {
