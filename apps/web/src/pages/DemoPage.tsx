@@ -428,8 +428,15 @@ function FeedbackPanel({
   );
 }
 
-function LivePanel({ active, onCelebrate }: { active: UseCase; onCelebrate: () => void }) {
-  const session = useRoundSession(active, DEFAULT_ROUND_ID);
+function LivePanel({
+  active,
+  session,
+  onCelebrate,
+}: {
+  active: UseCase;
+  session: ReturnType<typeof useRoundSession>;
+  onCelebrate: () => void;
+}) {
   const {
     address,
     walletStatus,
@@ -663,6 +670,7 @@ export function DemoPage({
 }) {
   const [mode, setMode] = useState<DemoMode>("live");
   const [confettiTick, setConfettiTick] = useState(0);
+  const session = useRoundSession(active, DEFAULT_ROUND_ID);
   const targetRound = DEMO_TRACE.meta.revealRound;
 
   return (
@@ -732,7 +740,11 @@ export function DemoPage({
             transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
           >
             {mode === "live" ? (
-              <LivePanel active={active} onCelebrate={() => setConfettiTick((t) => t + 1)} />
+              <LivePanel
+                active={active}
+                session={session}
+                onCelebrate={() => setConfettiTick((t) => t + 1)}
+              />
             ) : (
               <EvidencePanel />
             )}
