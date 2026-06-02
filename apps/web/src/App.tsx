@@ -21,6 +21,7 @@ import {
 import type { BidState, Round } from "@sub-rosa/sdk";
 import { DrandCountdownChip } from "./components/DrandCountdownChip";
 import { DEMO_TRACE } from "./demo/trace";
+import { formatCountdown, useDrandCountdown } from "./hooks/useDrandCountdown";
 import { shortAddr } from "./lib/format";
 
 const LOGO_SRC = "/sub-rosa-logo.png";
@@ -32,6 +33,9 @@ const ESCROW_TOKEN_LABEL = import.meta.env.VITE_ESCROW_TOKEN_LABEL ?? "token";
 const DEFAULT_ROUND_ID = import.meta.env.VITE_ROUND_ID
   ? BigInt(import.meta.env.VITE_ROUND_ID)
   : null;
+const LIVE_REVEAL_IN_SECONDS = 20;
+const LIVE_COMMIT_CLOSE_BEFORE_REVEAL_SECONDS = 10;
+const LIVE_REVEAL_WINDOW_AFTER_REVEAL_SECONDS = 90;
 
 type Page = "landing" | "app";
 type UseCaseId = "dao" | "grants" | "bounty" | "allocation";
@@ -173,6 +177,20 @@ function freighterError(result: { error?: unknown }) {
   return typeof result.error === "string"
     ? result.error
     : JSON.stringify(result.error);
+}
+
+function displayError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("Contract, #10")) {
+    return "Commit window closed. Create a fresh live round, then commit before the Drand countdown reaches reveal.";
+  }
+  if (message.includes("got 425") || message.includes("Error response fetching")) {
+    return "Drand R is not published yet. Wait for the countdown to reach live, then open + reveal.";
+  }
+  if (message.includes("trustline entry is missing")) {
+    return "Wallet is missing the escrow asset trustline. Use the XLM demo contract or fund/prepare this testnet wallet.";
+  }
+  return message;
 }
 
 function useWalletContract(address: string | null) {
@@ -363,6 +381,12 @@ function AppPage({
   const session = sessions[active.id];
   const { auditorPublicKey, commitValue, live, log, roundId } = session;
   const canUseContract = Boolean(CONTRACT_ID && contract);
+  const targetRound = live ? Number(live.round.reveal_round) : DEMO_TRACE.meta.revealRound;
+  const drandGate = useDrandCountdown(targetRound);
+  const commitSecondsRemaining = live
+    ? Math.max(0, Number(live.round.commit_deadline) - Math.floor(Date.now() / 1000))
+    : null;
+  const commitClosed = commitSecondsRemaining != null && commitSecondsRemaining <= 0;
 
   useEffect(() => {
     setEntryValue(active.defaultValue);
@@ -438,8 +462,11 @@ function AppPage({
     setStatus("working");
     try {
       const drand = quicknet();
-      const revealRound = await roundInSeconds(drand, 45);
-      const now = Math.floor(Date.now() / 1000);
+      const revealRound = await roundInSeconds(drand, LIVE_REVEAL_IN_SECONDS);
+      const info = await drand.chain().info();
+      const tReveal = Number(info.genesis_time) + Number(info.period) * revealRound;
+      const commitDeadline = tReveal - LIVE_COMMIT_CLOSE_BEFORE_REVEAL_SECONDS;
+      const revealDeadline = tReveal + LIVE_REVEAL_WINDOW_AFTER_REVEAL_SECONDS;
       const auditor = generateAuditorKeypair();
       const itemRef = await sha256Bytes(`${active.id}:${address}:${Date.now()}`);
       const tx = await contract.create_round({
@@ -447,19 +474,19 @@ function AppPage({
         item_ref: Buffer.from(itemRef),
         reveal_round: BigInt(revealRound),
         clearing_rule: { tag: "HighestBid", values: undefined },
-        commit_deadline: BigInt(now + 25),
-        reveal_deadline: BigInt(now + 150),
+        commit_deadline: BigInt(commitDeadline),
+        reveal_deadline: BigInt(revealDeadline),
         auditor_pubkey: Buffer.from(auditor.publicKey),
       });
       const sent = await tx.signAndSend();
       const nextRoundId = sent.result.unwrap() as bigint;
       updateSession(id, { roundId: nextRoundId, auditorPublicKey: auditor.publicKey });
       setStatus("ok");
-      push(`Created ${active.nav} round #${nextRoundId} for Drand R=${revealRound}.`, id);
+      push(`Created ${active.nav} round #${nextRoundId}. Quick mode: commit in ~10s, reveal opens right after Drand R=${revealRound}.`, id);
       await refresh(nextRoundId, id);
     } catch (error) {
       setStatus("error");
-      push(error instanceof Error ? error.message : String(error), id);
+      push(displayError(error), id);
     }
   }
 
@@ -496,13 +523,17 @@ function AppPage({
       await refresh(roundId, id);
     } catch (error) {
       setStatus("error");
-      push(error instanceof Error ? error.message : String(error), id);
+      push(displayError(error), id);
     }
   }
 
   async function openAndReveal() {
     if (!contract || roundId == null) return;
     const id = active.id;
+    if (live && !drandGate.published) {
+      push(`Drand R is still sealed. Wait ${formatCountdown(drandGate.secondsRemaining)}, then open + reveal.`, id);
+      return;
+    }
     setStatus("working");
     try {
       const drand = quicknet();
@@ -541,7 +572,7 @@ function AppPage({
       await refresh(roundId, id);
     } catch (error) {
       setStatus("error");
-      push(error instanceof Error ? error.message : String(error), id);
+      push(displayError(error), id);
     }
   }
 
@@ -563,7 +594,7 @@ function AppPage({
               {item.nav}
             </button>
           ))}
-          <DrandCountdownChip targetRound={live ? Number(live.round.reveal_round) : DEMO_TRACE.meta.revealRound} />
+          <DrandCountdownChip targetRound={targetRound} />
         </aside>
 
         <section key={active.id} className="case-workspace">
@@ -594,16 +625,26 @@ function AppPage({
                 onChange={(event) => setEntryValue(Number(event.target.value || active.defaultValue))}
               />
               <small>Live escrow for this demo: {formatDemoAmount(toDemoEscrowAmount(entryValue))}</small>
+              <small>Quick jury mode: after create, commit immediately; reveal opens about 10s later.</small>
             </div>
             <div className="action-buttons">
               <button type="button" className="secondary-action" onClick={createRound} disabled={!address || !canUseContract || status === "working"}>
                 1. Create live round
               </button>
-              <button type="button" className="primary-action" onClick={commitEntry} disabled={!address || !canUseContract || roundId == null || status === "working"}>
-                2. Commit sealed entry
+              <button type="button" className="primary-action" onClick={commitEntry} disabled={!address || !canUseContract || roundId == null || status === "working" || commitClosed}>
+                {commitSecondsRemaining != null && !commitClosed
+                  ? `2. Commit now (${formatCountdown(commitSecondsRemaining)})`
+                  : "2. Commit sealed entry"}
               </button>
-              <button type="button" className="secondary-action" onClick={openAndReveal} disabled={!address || !canUseContract || roundId == null || status === "working"}>
-                3. Open + reveal after R
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={openAndReveal}
+                disabled={!address || !canUseContract || roundId == null || status === "working" || Boolean(live && !drandGate.published)}
+              >
+                {live && !drandGate.published
+                  ? `3. Wait ${formatCountdown(drandGate.secondsRemaining)}`
+                  : "3. Open + reveal after R"}
               </button>
               <button type="button" className="ghost-action" onClick={() => refresh()} disabled={!address || !canUseContract || roundId == null}>
                 Refresh state
