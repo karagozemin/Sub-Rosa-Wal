@@ -65,22 +65,23 @@ export function LandingPage({
         <motion.div className="hero-copy" variants={fadeUp} transition={transition}>
           <span className="hero-eyebrow">
             <span>SR</span>
-            1st Place · Hack Privacy Track
+            Verifiable allocation on Stellar
           </span>
           <motion.h1 variants={fadeUp} transition={transition}>
-            Sealed rounds. <em>Fair reveals.</em>
+            Verifiable allocation. <em>Sealed by design.</em>
           </motion.h1>
           <motion.p className="lede" variants={fadeUp} transition={transition}>
-            Commit votes, scores, and bids on-chain now. Drand round R opens everyone at once —
-            no operator can read sealed values early.
+            Infrastructure for Stellar grants, bounties, hackathons, sealed auctions, and RFP
+            scoring.
           </motion.p>
           <motion.p className="hero-infra-line" variants={fadeUp} transition={transition}>
-            Built as an integratable Soroban primitive + SDK for Stellar apps, not just a demo UI.
+            Scores, bids, and allocation inputs stay unreadable until Drand R, then reveal and
+            settle publicly on Soroban.
           </motion.p>
 
           <motion.div className="hero-actions" variants={fadeUp} transition={transition}>
             <button type="button" className="primary-action large" onClick={onDemo}>
-              Try the live round
+              Open sealed grant scoring demo
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path
                   d="M5 12h14M13 6l6 6-6 6"
@@ -111,8 +112,8 @@ export function LandingPage({
               <strong>{DEMO_TRACE.keeper.contractBalanceFinal} USDC final</strong>
             </div>
             <div>
-              <span>Integration</span>
-              <strong>SDK + contract</strong>
+              <span>First pilot</span>
+              <strong>OverBlock</strong>
             </div>
           </motion.div>
         </motion.div>
@@ -125,8 +126,8 @@ export function LandingPage({
         >
           <div className="console-status-row">
             <div>
-              <span>round status</span>
-              <strong>Sealed</strong>
+              <span>allocation round</span>
+              <strong>Scores sealed</strong>
             </div>
             <span className="status-tag">commit live</span>
           </div>
@@ -155,27 +156,48 @@ export function LandingPage({
           <div className="console-events">
             <p>
               <strong>1</strong>
-              <span>Wallet signs commitment</span>
-              <em>~2s</em>
+              <span>Judges submit sealed scores</span>
+              <em>private</em>
             </p>
             <p>
               <strong>2</strong>
-              <span>Escrow locked on Soroban</span>
-              <em>on-chain</em>
+              <span>Drand R opens the scoring set</span>
+              <em>public</em>
             </p>
             <p>
               <strong>3</strong>
-              <span>Permissionless reveal at R</span>
-              <em>BLS verify</em>
+              <span>Soroban settles the result</span>
+              <em>verifiable</em>
             </p>
           </div>
 
           <div className="proof-strip">
             <span>{shortAddr(DEMO_TRACE.meta.contractId, 6)}</span>
-            <span>{DEMO_TRACE.meta.clearingRule}</span>
+            <span>sealed scoring</span>
             <span>round #{DEMO_TRACE.meta.roundId}</span>
           </div>
         </motion.div>
+      </motion.section>
+
+      <motion.section
+        className="pilot-banner"
+        initial={{ opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-80px" }}
+        transition={transition}
+      >
+        <div>
+          <span>First internal pilot</span>
+          <h2>OverBlock</h2>
+        </div>
+        <p>
+          OverBlock will be Sub Rosa&apos;s first internal pilot environment for sealed judging,
+          bounty allocation, and grant-style scoring workflows.
+        </p>
+        <p>
+          We are also preparing small external pilot conversations with Stellar ecosystem teams,
+          hackathon organizers, DAOs, and grant/RFP programs.
+        </p>
       </motion.section>
 
       <section className="landing-cases-section">
@@ -186,10 +208,10 @@ export function LandingPage({
           viewport={{ once: true, margin: "-80px" }}
           transition={transition}
         >
-          <h2>Pick a sealed round to run.</h2>
+          <h2>Run a verifiable allocation workflow.</h2>
           <p>
-            Each case loads the same primitive — different language, same on-chain enforcement.
-            Click to jump straight into a live testnet round.
+            Each case uses the same sealed-round primitive: inputs stay hidden until reveal, then
+            the result is public and enforceable on Stellar.
           </p>
         </motion.div>
 

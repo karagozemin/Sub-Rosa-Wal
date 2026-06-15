@@ -70,7 +70,7 @@ export interface UseCase {
 const formatUsdc = (value: number): string =>
   `${value.toLocaleString(undefined, { maximumFractionDigits: 0 })} USDC`;
 
-export const USE_CASES: UseCase[] = [
+const USE_CASE_DEFINITIONS: UseCase[] = [
   {
     id: "dao",
     nav: "DAO Vote",
@@ -131,11 +131,11 @@ export const USE_CASES: UseCase[] = [
   },
   {
     id: "grants",
-    nav: "Grant Scores",
-    tagline: "Judging",
-    title: "Score a grant blind.",
+    nav: "Grant Allocation",
+    tagline: "Grants · SCF-style",
+    title: "Run a sealed grant review.",
     oneLine:
-      "Judges commit sealed scores; the keeper opens the whole panel together at Drand R.",
+      "Judges submit sealed scores; Drand opens the panel together for a verifiable allocation result.",
     inputKind: "score",
     inputLabel: "your score",
     defaultValue: 8,
@@ -250,6 +250,12 @@ export const USE_CASES: UseCase[] = [
     outcomeKind: "distribution",
   },
 ];
+
+const USE_CASE_ORDER: UseCaseId[] = ["grants", "bounty", "allocation", "dao"];
+
+export const USE_CASES: UseCase[] = USE_CASE_ORDER.map((id) =>
+  USE_CASE_DEFINITIONS.find((item) => item.id === id),
+).filter((item): item is UseCase => item != null);
 
 export function getUseCase(id: UseCaseId) {
   return USE_CASES.find((item) => item.id === id) ?? USE_CASES[0];

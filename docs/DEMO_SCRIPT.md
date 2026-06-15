@@ -2,9 +2,25 @@
 
 Walkthrough for `pnpm web:dev` (default http://localhost:5173).
 
+## Primary narrative: verifiable grant allocation
+
+Open the **Grant Allocation** case first. Frame the product as allocation
+infrastructure, not as a general privacy app:
+
+1. Five projects enter a grant round.
+2. Three judges submit sealed scores.
+3. No judge or operator can read scores before reveal.
+4. Drand opens the final scoring set at the shared reveal time.
+5. Soroban settles the result/refunds deterministically.
+6. The organizer can publish a verifiable round receipt.
+
+The current live case proves the sealed-scoring primitive. The recorded
+evidence view proves the contract lifecycle, settlement, and public audit path.
+
 ## 1. Showcase (30s)
 
-- **Opening:** sealed coordination story
+- **Opening:** verifiable allocation for grants, hackathons, bounties, RFPs,
+  and sealed auctions
 - **Mainnet proof card:** settled round 1 on real XLM (link to stellar.expert)
 - **Drand chip:** live countdown to recorded testnet R (from `demo-trace.generated.ts`)
 

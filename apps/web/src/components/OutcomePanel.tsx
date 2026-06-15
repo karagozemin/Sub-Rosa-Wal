@@ -107,7 +107,7 @@ function LeaderboardOutcome({
   return (
     <div className="outcome-leaderboard">
       <div className="outcome-headline">
-        <span>Final ranking</span>
+        <span>Sealed panel result</span>
         <strong>
           Average{" "}
           {avg.toLocaleString(undefined, {
@@ -117,7 +117,7 @@ function LeaderboardOutcome({
           / 10
         </strong>
       </div>
-      <ol className="leaderboard">
+      <ol className="leaderboard" aria-label="Revealed judge scores">
         {rows.map((row, i) => (
           <motion.li
             key={`${row.name}-${i}`}

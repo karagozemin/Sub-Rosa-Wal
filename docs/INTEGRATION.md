@@ -57,14 +57,14 @@ await client.commit({
 After Drand round `R` is published, any keeper or participant can submit the
 Drand signature, reveal valid entries, clear the round, and settle escrow.
 
-## Example product surfaces
+## Allocation use cases
 
-- DAO voting: hidden ballots until reveal
-- Grant scoring: judges cannot react to leaked scores
+- SCF-style grant allocation: judges cannot react to leaked scores
+- Hackathon judging: panel scores open together after judging closes
+- Bounty distribution: reviews and allocation inputs stay sealed
+- RFP scoring: vendors and evaluators cannot tune inputs from visible competitors
 - Sealed auctions: bids remain unreadable before close
-- RFPs: vendors cannot tune bids from visible competitors
-- Bounty judging: reviews stay sealed until the panel closes
-- Token allocation: demand signals do not leak during the window
+- DAO/community allocation: demand signals and ballots do not leak during the window
 
 ## Hosted vs embedded
 
@@ -79,4 +79,3 @@ Drand signature, reveal valid entries, clear the round, and settle escrow.
 Sub Rosa does not ask integrators to trust a reveal operator. Before Drand R,
 values are timelock-encrypted. After R, the Drand BLS signature is public and
 the Soroban contract verifies it before opening reveal.
-

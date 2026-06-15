@@ -640,6 +640,48 @@
   background: rgba(6, 9, 14, 0.6);
 }
 
+/* === Pilot banner === */
+.pilot-banner {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.65fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+  margin-bottom: 56px;
+  padding: 24px 28px;
+  border: 1px solid rgba(91, 108, 255, 0.32);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(120deg, rgba(91, 108, 255, 0.12), transparent 45%),
+    var(--surface-1);
+  box-shadow: var(--shadow-md);
+}
+
+.pilot-banner span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pilot-banner h2,
+.pilot-banner p {
+  margin: 0;
+}
+
+.pilot-banner h2 {
+  font-size: clamp(1.7rem, 3vw, 2.4rem);
+  letter-spacing: -0.03em;
+}
+
+.pilot-banner p {
+  color: var(--muted);
+  font-size: 0.94rem;
+  line-height: 1.55;
+}
+
 /* === Use cases grid === */
 .landing-cases-section {
   margin-top: 8px;
@@ -769,19 +811,48 @@ button.case-card-link strong {
   .landing-cases {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .pilot-banner {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pilot-banner > div {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 680px) {
   .landing-page {
     padding: 16px 14px 60px;
+    overflow-x: hidden;
   }
 
   .landing-nav {
     padding: 6px;
   }
 
+  .landing-nav .brand-link {
+    flex-shrink: 0;
+  }
+
   .landing-nav-actions a {
     display: none;
+  }
+
+  .landing-nav-actions .landing-status-pill {
+    display: none;
+  }
+
+  .hero-copy {
+    padding: 28px;
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(2.15rem, 11vw, 2.6rem);
+  }
+
+  .lede {
+    font-size: 1rem;
   }
 
   .hero-metrics {
@@ -792,9 +863,22 @@ button.case-card-link strong {
     grid-template-columns: 1fr;
   }
 
+  .pilot-banner {
+    grid-template-columns: 1fr;
+    padding: 22px;
+  }
+
+  .pilot-banner > div {
+    grid-column: auto;
+  }
+
   .hero-actions .primary-action,
   .hero-actions .secondary-action {
-    flex: 1;
-    min-width: 140px;
+    flex: 1 1 100%;
+    justify-content: center;
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+    text-align: center;
   }
 }

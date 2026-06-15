@@ -11,8 +11,9 @@ and open-source plan.
 
 ## One-line positioning
 
-Sub Rosa is reusable sealed coordination infrastructure for Stellar apps:
-commit privately, reveal publicly, settle fairly.
+Sub Rosa is verifiable allocation infrastructure for Stellar grants,
+hackathons, bounties, RFPs, and sealed auctions: submit sealed inputs, reveal
+publicly, and settle fairly.
 
 ## Problem
 
@@ -28,6 +29,17 @@ deadline:
 
 The usual workaround is to trust an operator to keep data secret. Sub Rosa
 removes that operator from the trust path.
+
+## Pilot plan
+
+Sub Rosa's first pilot will run with **OverBlock** as an internal
+builder/community environment for sealed judging, bounty allocation, and
+grant-style scoring workflows.
+
+Beyond OverBlock, external pilot conversations will target Stellar ecosystem
+teams, hackathon organizers, DAOs, and grant/RFP programs that need sealed
+scoring, sealed bidding, or verifiable allocation workflows. The pilot plan and
+outreach language are documented in `docs/PILOT_PLAYBOOK.md`.
 
 ## Solution
 

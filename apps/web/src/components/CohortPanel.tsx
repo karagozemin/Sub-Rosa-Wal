@@ -131,8 +131,8 @@ export function CohortPanel({
 
   const headerLabel = useReal ? "On-chain cohort" : "Sealed cohort";
   const headerDescription = useReal
-    ? `Live on-chain bidders for round ${pasteRoundId(roundId)}. Every row is a real Stellar address committing to the same Drand R.`
-    : "Each row is encrypted to Drand R until reveal. Co-bidders are simulated for the demo; your commit is real on-chain.";
+    ? `Live on-chain participants for round ${pasteRoundId(roundId)}. Every row is a real Stellar address committing to the same Drand R.`
+    : "Each row is encrypted to Drand R until reveal. Other participants are simulated for the demo; your commit is real on-chain.";
 
   return (
     <section className="cohort-panel">
@@ -184,7 +184,7 @@ export function CohortPanel({
                   <div className="cohort-name">
                     <span className="cohort-dot" aria-hidden="true" />
                     <strong>{shortAddr(peer.address, 5)}</strong>
-                    <small>on-chain bidder</small>
+                    <small>on-chain participant</small>
                   </div>
                   <div className="cohort-state">
                     <AnimatePresence mode="wait" initial={false}>

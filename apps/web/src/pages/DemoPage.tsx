@@ -199,7 +199,7 @@ function PhaseGuide(props: {
     tone = "complete";
     eyebrow = "Done · revealed";
     title = "Round revealed";
-    detail = `${revealedCount} bid(s) opened on-chain. The contract cleared deterministically.`;
+    detail = `${revealedCount} sealed entries opened on-chain. The contract cleared deterministically.`;
     timerValue = String(revealedCount);
     ctaLabel = "Round complete";
     ctaDisabled = true;
@@ -208,7 +208,7 @@ function PhaseGuide(props: {
     eyebrow = "Sealed on-chain";
     title = "Entry locked";
     detail =
-      "Your bid is sealed. After the commit window closes, Drand R publishes in about 10 seconds.";
+      "Your entry is sealed. After the commit window closes, Drand R publishes in about 10 seconds.";
     timerLabel = "Commit closes in";
     timerValue = formatCountdown(commitSeconds);
     ctaLabel = "Waiting for window";
@@ -226,7 +226,7 @@ function PhaseGuide(props: {
     tone = "ready";
     eyebrow = "Step 3 · reveal";
     title = "Open the gate";
-    detail = "Drand R is live. Anyone can submit the BLS signature and reveal every bid at once.";
+    detail = "Drand R is live. Anyone can submit the BLS signature and reveal every entry at once.";
     timerValue = "live";
     ctaLabel = "Open + reveal";
     cta = openAndReveal;

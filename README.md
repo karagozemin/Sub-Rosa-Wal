@@ -6,16 +6,18 @@
 
 **1st Place — Hack Privacy Track, Build On Stellar Hackathon — IBW 2026**
 
-**Confidential commit-reveal coordination on Stellar.** Participants commit
-encrypted decisions now; a public, unbiased Drand round unseals them later,
+**Verifiable allocation infrastructure for Stellar grants, hackathons,
+bounties, RFPs, and sealed auctions.** Participants submit sealed scores, bids,
+or allocation decisions now; a public, unbiased Drand round unseals them later,
 verifiably and all at once. The protocol — not the operator — owns fairness.
 
 > Built on what's proven. Sealed by math, not by trust.
 
-Sub Rosa is now evolving from a hackathon-winning demo into reusable sealed
-coordination infrastructure for Stellar apps: a Soroban primitive, TypeScript
-SDK, keeper service, and integration templates for teams that need fair
-timed reveals without building cryptography from scratch.
+Sub Rosa is now evolving from a hackathon-winning privacy demo into reusable
+allocation infrastructure for Stellar apps: a Soroban primitive, TypeScript
+SDK, keeper service, and integration templates for teams that need sealed
+judging, scoring, bidding, or allocation without building cryptography from
+scratch.
 
 Target next milestone: **Stellar Community Fund Build Award**. The goal is to
 turn the current proof into production-ready developer infrastructure:
@@ -37,6 +39,21 @@ Licensed under [MIT](./LICENSE).
 | **Mainnet verify** | `pnpm mainnet:verify` | Mainnet | Read-only check of settled round 1 |
 
 See [docs/LIMITATIONS.md](./docs/LIMITATIONS.md) for honest scope (mainnet ≠ full USDC product).
+
+---
+
+## Pilot plan
+
+Sub Rosa's first pilot will run with **OverBlock** as an internal
+builder/community environment for sealed judging, bounty allocation, and
+grant-style scoring workflows.
+
+Beyond OverBlock, we are actively preparing external pilot conversations with
+Stellar ecosystem teams, hackathon organizers, DAOs, and grant/RFP programs
+that need sealed scoring, sealed bidding, or verifiable allocation workflows.
+
+See [docs/PILOT_PLAYBOOK.md](./docs/PILOT_PLAYBOOK.md) for the pilot scope,
+SCF-style demo narrative, and outreach message.
 
 ---
 
@@ -107,10 +124,11 @@ pnpm mainnet:micro           # dry-run checklist; --execute needs MAINNET_CONFIR
 
 ## The idea
 
-Public ledgers are transparent by default, which quietly breaks every process
-that depends on not knowing things too early — auctions, RFPs, grant scoring,
-bounty allocation. The usual "fix" trusts the operator. Sub Rosa removes the
-operator from the trust path entirely:
+Public ledgers are transparent by default, which quietly breaks fair allocation
+when participants or judges can see each other's inputs too early. That affects
+grant scoring, hackathon judging, bounty allocation, RFPs, and sealed auctions.
+The usual "fix" trusts the operator. Sub Rosa removes the operator from the
+trust path entirely:
 
 - **Seal** each bid with Drand timelock encryption (`tlock`) to a future round R.
 - **Force-open** at R: BLS12-381 verified **on-chain** — simultaneous reveal.
@@ -147,6 +165,7 @@ pnpm mainnet:verify         # mainnet read-only proof
 | --- | --- |
 | **[ARCHITECTURE.md](./ARCHITECTURE.md)** | System overview, lifecycle, trust boundaries, repo map |
 | [docs/SCF_PLAN.md](./docs/SCF_PLAN.md) | SCF Build framing, tranches, deliverables, ecosystem value |
+| [docs/PILOT_PLAYBOOK.md](./docs/PILOT_PLAYBOOK.md) | OverBlock pilot scope, external pilot outreach, SCF-style demo narrative |
 | [docs/INTEGRATION.md](./docs/INTEGRATION.md) | How another Stellar app embeds Sub Rosa |
 | [docs/TECH_DESIGN.md](./docs/TECH_DESIGN.md) | Cryptography, storage, settlement rails |
 | [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md) | Adversaries, mitigations, honest limits |

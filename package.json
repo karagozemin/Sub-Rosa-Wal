@@ -2,7 +2,7 @@
   "name": "sub-rosa",
   "version": "0.1.0",
   "private": true,
-  "description": "Confidential commit-reveal coordination on Stellar — sealed by math, not by trust.",
+  "description": "Verifiable allocation infrastructure for Stellar grants, hackathons, bounties, RFPs, and sealed auctions.",
   "license": "MIT",
   "packageManager": "pnpm@10.13.1",
   "engines": {
