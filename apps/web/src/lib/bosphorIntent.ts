@@ -16,6 +16,7 @@ import type { StorageReceipt } from "./storageTypes";
 const BOSPHOR_ABI = parseAbi([
   "function quote(uint32 dstEid, bytes payload, uint256 deadline, bytes options) view returns (uint256 nativeFee, uint256 lzTokenFee)",
   "function submitIntent(uint32 dstEid, bytes payload, uint256 deadline, bytes options) payable returns (bytes32 intentId)",
+  "event IntentSubmitted(bytes32 indexed intentId, address indexed sender, uint64 targetChainId, bytes payload, uint256 nonce, uint256 deadline)",
   "event IntentExecuted(bytes32 indexed intentId, bytes proof)",
 ]);
 const INTENT_EXECUTED_EVENT = parseAbiItem("event IntentExecuted(bytes32 indexed intentId, bytes proof)");
@@ -86,6 +87,24 @@ function findIntentExecuted(
         (!intentId || decoded.args.intentId.toLowerCase() === intentId.toLowerCase())
       ) {
         return { intentId: decoded.args.intentId, proof: decoded.args.proof };
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function findIntentSubmitted(logs: Array<{ topics: readonly Hex[]; data: Hex }>): Hex | null {
+  for (const log of logs) {
+    try {
+      const decoded = decodeEventLog({
+        abi: BOSPHOR_ABI,
+        data: log.data,
+        topics: log.topics as unknown as [Hex, ...Hex[]],
+      });
+      if (decoded.eventName === "IntentSubmitted") {
+        return decoded.args.intentId;
       }
     } catch {
       continue;
@@ -181,12 +200,16 @@ export async function submitBosphorIntent({
     }),
   });
   const txReceipt = await publicClient.waitForTransactionReceipt({ hash: evmTxHash });
-  const executedProof = findIntentExecuted(txReceipt.logs);
+  const submittedIntentId = findIntentSubmitted(txReceipt.logs);
+  if (!submittedIntentId) {
+    throw new Error("Bosphor transaction confirmed, but IntentSubmitted event was not found in the receipt.");
+  }
+  const executedProof = findIntentExecuted(txReceipt.logs, submittedIntentId);
   if (!executedProof) {
     return {
       storageProvider: "bosphor-walrus",
       status: "submitted",
-      intentId: "",
+      intentId: submittedIntentId,
       evmTxHash,
       walrusBlobId: "",
       endEpoch: "",
@@ -198,7 +221,7 @@ export async function submitBosphorIntent({
   return withExecutedProof({
     storageProvider: "bosphor-walrus",
     status: "submitted",
-    intentId: executedProof.intentId,
+    intentId: submittedIntentId,
     evmTxHash,
     walrusBlobId: "",
     endEpoch: "",
