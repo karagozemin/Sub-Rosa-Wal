@@ -303,7 +303,7 @@ export function useRoundSession(
         commitmentHash,
         encryptedPayload: encrypted.encryptedPayload,
       };
-      toast.push(
+      const storageToastId = toast.push(
         "working",
         "Storing sealed metadata on Walrus…",
         activeRoute === "bosphor-walrus"
@@ -322,6 +322,7 @@ export function useRoundSession(
               payload: storagePayload,
               contentHash: encrypted.contentHash,
             });
+      toast.dismiss(storageToastId);
       const receiptRef = storageReceipt.walrusBlobId || storageReceipt.intentId || storageReceipt.evmTxHash;
       push(
         storageReceipt.status === "pending"
