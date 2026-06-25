@@ -25,6 +25,19 @@ Mainnet does **not** replay 700 / 459 USDC demo amounts. Mainnet smoke uses **1 
 - **Passkey-Kit** — UI demo + ecosystem docs; agents use Ed25519 session keys in this build.
 - **Hosted appraisal API on mainnet** — x402 proof is testnet-only in automated e2e.
 
+## Walrus storage layer
+
+- The main app flow does **not** use mock storage. Missing Walrus/Bosphor
+  configuration blocks create actions instead of producing fake demo data.
+- The app does not use `localStorage` as a Walrus blob backend. It may cache
+  recent receipts for convenience only.
+- Freighter can sign Stellar/Soroban actions, but it cannot sign Bosphor EVM
+  transactions.
+- RainbowKit/EVM wallets can sign Bosphor storage intents, but they cannot
+  replace Stellar/Soroban proof, reveal, or settlement logic.
+- Older deployed Round contracts without `attach_storage_ref` can run the base
+  Sub Rosa lifecycle, but cannot bind a Walrus receipt on-chain.
+
 ## UI demo trace
 
 - **Single canonical trace** — `apps/web/src/demo/demo-trace.generated.ts`, written by `pnpm agents:e2e`.

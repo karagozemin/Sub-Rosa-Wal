@@ -6,7 +6,8 @@ Sub Rosa **does not require a committed `.env` file**. Secrets stay out of git; 
 
 | Layer | Needs env? | When vars are read |
 | --- | --- | --- |
-| **Jury UI** (`apps/web`) | Optional | **Build time** (`VITE_*` baked into static JS) |
+| **Jury UI trace mode** (`apps/web`) | Optional | **Build time** (`VITE_*` baked into static JS) |
+| **Live Walrus-backed UI flow** | Yes | **Build time** (`VITE_*` baked into static JS) |
 | **Keeper / appraisal API** | Yes (secrets) | **Runtime** (shell, systemd, Fly/Railway secrets) |
 | **One-off scripts** (deploy, e2e) | Yes | **Runtime** (inline `VAR=… command` or CI secrets) |
 
@@ -59,6 +60,49 @@ VITE_ROUND_ID=1
 
 Important: Vite only exposes vars prefixed with `VITE_`. They are **public** in the browser bundle — never put secret keys here.
 
+---
+
+## 3. Live Walrus-backed round flow
+
+The live create-round flow stores encrypted metadata on Walrus before the
+normal Sub Rosa/Soroban action continues. This path needs real public
+configuration. Missing storage vars block creation instead of producing fake
+blob ids.
+
+For the **Stellar route** (Freighter + direct Walrus publisher):
+
+```bash
+VITE_RPC_URL=https://soroban-testnet.stellar.org
+VITE_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
+VITE_CONTRACT_ID=CC6ROZCIXFTMB47TIWPRKPEHBGI2DSDOONPY47ETVLHUN327EEGJE6UK
+VITE_ESCROW_TOKEN_LABEL=XLM
+VITE_WALRUS_PUBLISHER_URL=https://publisher.walrus-testnet.walrus.space
+```
+
+For the **EVM route** (RainbowKit/wagmi + Bosphor -> Walrus):
+
+```bash
+VITE_BOSPHOR_ADAPTER_ADDRESS=0x...
+VITE_BOSPHOR_CHAIN_ID=...
+VITE_BOSPHOR_DST_EID=40378
+VITE_BOSPHOR_LZ_OPTIONS=0x00030100110100000000000000000000000000030d40
+VITE_WALLETCONNECT_PROJECT_ID=...
+```
+
+Optional:
+
+```bash
+VITE_EVM_RPC_URL=https://...
+```
+
+If `VITE_EVM_RPC_URL` is omitted, wagmi/RainbowKit uses the connected wallet
+provider and configured chain. Do not use this optional RPC value as a secret.
+
+The configured Soroban contract must expose `attach_storage_ref` and
+`get_storage_ref`. Older testnet contracts that only expose the base
+`create_round`/commit/reveal lifecycle can run classic Sub Rosa rounds, but
+they cannot bind a Walrus receipt on-chain.
+
 ### Local dev (optional)
 
 ```bash
@@ -71,7 +115,7 @@ pnpm web:dev
 
 ---
 
-## 3. Keeper watch mode (runtime secrets)
+## 4. Keeper watch mode (runtime secrets)
 
 Runs on a server/VM, not in the static site. No `.env` file required — export vars in the process manager:
 
@@ -98,7 +142,7 @@ See root `.env.example` for the full keeper variable list.
 
 ---
 
-## 4. Deploy & settle scripts (runtime, inline)
+## 5. Deploy & settle scripts (runtime, inline)
 
 Scripts read env at invocation — no `.env` file on disk:
 
@@ -115,7 +159,7 @@ E2E scripts (`lifecycle:e2e`, `agents:e2e`) generate ephemeral keys via Stellar 
 
 ---
 
-## 5. Appraisal API (if you host it)
+## 6. Appraisal API (if you host it)
 
 Runtime env for `pnpm appraisal:start`:
 
@@ -139,6 +183,9 @@ Shipping jury demo only?
 
 Want live on-chain overlay on the site?
   → set VITE_* in hosting build env, then build
+
+Want live Walrus-backed round creation?
+  → set VITE_WALRUS_PUBLISHER_URL or Bosphor vars and use a contract with attach_storage_ref
 
 Running keeper 24/7?
   → KEEPER_SECRET + ROUND_CONTRACT_ID on the server (runtime)

@@ -10,6 +10,7 @@ Sub Rosa is a **sealed commit–reveal coordination primitive** on Stellar Sorob
 
 | Phase | Who acts | What happens |
 | --- | --- | --- |
+| **Storage reference** | Operator / app | Encrypt metadata, store on Walrus, attach compact reference on Soroban |
 | **Commit** | Bidder or agent session key | Lock escrow, post commitment `H`, store tlock ciphertext + auditor blob |
 | **Wait R** | — | Bids undecryptable; only `H` and escrow are public |
 | **Open reveal** | Anyone (keeper) | Submit Drand round-R BLS signature; verified **on-chain** |
@@ -28,14 +29,21 @@ The operator does **not** need keys to open bids. After R, values are public; id
                          │  ┌───────────────────────────────────┐  │
   sealBid + commit ─────►│  │  contracts/round (Round WASM)     │  │
   (session key)          │  │  · create_round / commit / reveal │  │
-                         │  │  · open_reveal (BLS verify)       │  │
-                         │  │  · clear / settle (SAC)         │  │
+                         │  │  · attach_storage_ref             │  │
+                         │  │  · open_reveal / clear / settle   │  │
                          │  └───────────────────────────────────┘  │
                          └─────────────────────────────────────────┘
         ▲                              ▲
         │ packages/tlock               │ packages/sdk (SubRosaClient)
         │ sealBid / openBid            │ bindings + RPC (+ optional OZ submitter)
         │                              │
+        │                              │ compact storage ref only
+        │                              │
+ ┌──────┴──────┐   encrypted payload    ┌────────────────────────┐
+ │ apps/web    │───────────────────────►│ Walrus storage          │
+ │ encrypts    │ direct publisher or    │ blob id + end epoch     │
+ │ metadata    │ Bosphor EVM intent     └────────────────────────┘
+ └─────────────┘
  ┌──────┴──────┐                ┌──────┴──────┐
  │ services/   │   HTTP 402     │ services/   │
  │ agent       │───────────────►│ appraisal-  │
@@ -59,11 +67,15 @@ sequenceDiagram
   participant Op as Operator
   participant A as Agent / bidder
   participant C as Round contract
+  participant W as Walrus / Bosphor storage route
   participant X as x402 appraisal API
   participant D as Drand quicknet
   participant K as Keeper
 
+  Op->>W: store encrypted round metadata
+  W-->>Op: blob id / intent id / end epoch
   Op->>C: create_round(R, deadlines, auditor pubkey)
+  Op->>C: attach_storage_ref(content_hash, commitment_hash, blob_id)
   A->>X: pay appraisal (x402, testnet USDC)
   X-->>A: fair value + suggested bid
   A->>C: commit(H, ciphertext, auditor blob, escrow)
@@ -82,7 +94,7 @@ sequenceDiagram
 
 | Path | Layer | Responsibility |
 | --- | --- | --- |
-| `contracts/round/` | On-chain | Soroban Round: storage tiers, BLS host verify, SAC settle |
+| `contracts/round/` | On-chain | Soroban Round: storage tiers, storage references, BLS host verify, SAC settle |
 | `packages/round-bindings/` | Generated | TypeScript bindings from WASM |
 | `packages/tlock/` | Crypto (off-chain) | tlock seal/open, auditor identity blob |
 | `packages/sdk/` | Client | `SubRosaClient`, encoding, optional OZ Relayer Channels submitter |
@@ -90,7 +102,7 @@ sequenceDiagram
 | `services/keeper/` | Ops | Permissionless reveal/clear/settle; `keeper:watch` daemon |
 | `services/appraisal-api/` | Service | x402-gated appraisal (SEP-41 USDC on testnet) |
 | `services/agent/` | Agent support | Session mandate, cap checks, x402 + commit flow |
-| `apps/web/` | UI | Jury demo; reads `demo-trace.generated.ts` from `agents:e2e` |
+| `apps/web/` | UI | Jury demo; encrypts metadata, stores through Walrus/Bosphor, reads `demo-trace.generated.ts` from `agents:e2e` |
 
 Package manager: **pnpm** workspace. Contract build: **Stellar CLI** + Rust (`wasm32v1-none`).
 
@@ -101,6 +113,8 @@ Package manager: **pnpm** workspace. Contract build: **Stellar CLI** + Rust (`wa
 | Component | Trusted for | Not trusted for |
 | --- | --- | --- |
 | **Round contract** | Escrow, `H` binding, BLS gate, clearing rule | Off-chain mandate caps |
+| **Walrus** | Encrypted heavy metadata availability | Fairness, reveal, escrow, settlement |
+| **Bosphor** | EVM-to-Walrus storage intents | Stellar/Soroban transaction signing |
 | **Drand quicknet** | Unbiased future randomness / round-R sig | Liveness (keeper can void after grace) |
 | **Operator** | Creating rounds, receiving winner payment | Reading sealed bids before R |
 | **Keeper** | Liveness (open/reveal/clear) | Secrecy after R (all bids must reveal) |
@@ -122,6 +136,31 @@ On **testnet**, both appraisal and prize settlement use **USDC SAC**. They are i
 | **SAC `settle()`** | Round contract escrow → operator + refunds | Winner prize — **not** x402 |
 
 **Mainnet smoke** uses **native XLM SAC** (1 / 5 XLM), not USDC — see [docs/LIMITATIONS.md](./docs/LIMITATIONS.md).
+
+---
+
+## Walrus storage layer
+
+Walrus stores encrypted heavy data. Stellar/Soroban stores the compact reference
+that binds a round to that payload:
+
+```text
+attach_storage_ref(round_id, operator, content_hash, commitment_hash,
+  storage_provider, intent_id, blob_id, end_epoch)
+```
+
+The application layer is responsible for encrypting data and talking to Walrus.
+Stellar does not call Walrus or Bosphor directly.
+
+The live UI supports two explicit wallet routes:
+
+| Route | Wallet | Storage | Soroban |
+| --- | --- | --- | --- |
+| Stellar route | Freighter | Direct Walrus publisher | Freighter signs Sub Rosa transactions |
+| EVM route | RainbowKit / wagmi | Bosphor -> Walrus | EVM signs only storage intent; Soroban still needs Stellar signing |
+
+See [docs/WALRUS_STORAGE.md](./docs/WALRUS_STORAGE.md) for the storage receipt
+shape, environment variables, and non-goals.
 
 ---
 
@@ -223,6 +262,7 @@ logic.
 | Network | Contract | UI / trace |
 | --- | --- | --- |
 | **Testnet** | `CAPTODBCDEVIK23ALBJBS2TXRTIK47ZA5MBTHYF4XLHG2BK7JPYUCU2Y` | `apps/web/src/demo/demo-trace.generated.ts` |
+| **Testnet Walrus ref contract** | `CC6ROZCIXFTMB47TIWPRKPEHBGI2DSDOONPY47ETVLHUN327EEGJE6UK` | Fresh UI/dev contract with `attach_storage_ref` |
 | **Mainnet** | `CA7KSDEYJEPGZEB2ZROTLUWKQQ6GIRIQNGG6Z745MZ34QHP4UJPWODEX` | Mainnet proof card in UI; `pnpm mainnet:verify` |
 
 Canonical end-to-end testnet run (agents → x402 → commits → keeper → settle → 0):
@@ -233,7 +273,9 @@ pnpm agents:e2e
 
 Other proofs: `pnpm lifecycle:e2e`, `pnpm appraisal:e2e`, `pnpm mainnet:verify`. See README **Proof at a glance**.
 
-The web UI is **read-mostly**: embedded trace + optional live RPC poll. No wallet connect in the jury demo.
+The web UI includes a live wallet path for Freighter and RainbowKit route
+selection. The embedded trace remains available for read-only judging, but
+Walrus-backed live rounds require a deployed contract with `attach_storage_ref`.
 
 ---
 
@@ -242,7 +284,7 @@ The web UI is **read-mostly**: embedded trace + optional live RPC poll. No walle
 | Tier | Contents | Lifetime |
 | --- | --- | --- |
 | **Instance** | Drand pubkey, DST, genesis, period, token SAC | Contract lifetime |
-| **Persistent** | Round record, per-bidder escrow / revealed value | Until settle or void |
+| **Persistent** | Round record, storage reference, per-bidder escrow / revealed value | Until settle or void |
 | **Temporary** | Ciphertext + auditor blob | Expires after reveal window |
 
 ---

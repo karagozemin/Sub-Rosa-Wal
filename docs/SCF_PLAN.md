@@ -57,6 +57,10 @@ Sub Rosa lets applications create a timed sealed round on Soroban:
 The frontend is only the demo layer. The product is the protocol, Soroban
 contract, SDK, keeper service, and integration templates.
 
+Sub Rosa-Wal adds an encrypted Walrus storage layer for heavier round and
+submission metadata. The storage layer is application-routed; Stellar/Soroban
+still owns commitments, reveal, proof references, clearing, and settlement.
+
 ## Why Stellar
 
 Stellar is a core part of the product, not superficial storage:
@@ -72,9 +76,10 @@ Stellar is a core part of the product, not superficial storage:
 
 | Proof | Network | Status |
 | --- | --- | --- |
-| Round contract + tests | Local/Soroban | 14 Rust tests |
+| Round contract + tests | Local/Soroban | 16 Rust tests, including storage references |
 | tlock package + auditor blob | Local | 13 tests |
 | SDK | Local/Testnet | Contract bindings + direct RPC submitter |
+| Walrus storage reference | Testnet/dev | Encrypted metadata stored on Walrus, compact reference attached on Soroban |
 | Full lifecycle | Testnet | `pnpm lifecycle:e2e`: 2 bidders, USDC SAC, settle to 0 |
 | Multi-agent + x402 | Testnet | `pnpm agents:e2e`: x402 appraisal, sealed commits, keeper reveal, settle |
 | UI trace | Testnet | Canonical generated trace in `apps/web/src/demo/demo-trace.generated.ts` |
@@ -90,6 +95,7 @@ documented in `docs/LIMITATIONS.md`.
 The repository already contains the major components:
 
 - `contracts/round`: Soroban sealed-round primitive
+- Walrus/Bosphor route in `apps/web`: encrypted metadata storage before round actions
 - `packages/sdk`: TypeScript SDK for app integration
 - `packages/tlock`: timelock seal/open helpers and auditor blob
 - `services/keeper`: permissionless keeper and watch mode

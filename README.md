@@ -198,6 +198,7 @@ pnpm mainnet:verify         # mainnet read-only proof
 | [docs/PILOT_PLAYBOOK.md](./docs/PILOT_PLAYBOOK.md) | OverBlock pilot scope, external pilot outreach, SCF-style demo narrative |
 | [docs/INTEGRATION.md](./docs/INTEGRATION.md) | How another Stellar app embeds Sub Rosa |
 | [docs/TECH_DESIGN.md](./docs/TECH_DESIGN.md) | Cryptography, storage, settlement rails |
+| [docs/WALRUS_STORAGE.md](./docs/WALRUS_STORAGE.md) | Walrus/Bosphor storage routes and Soroban proof reference |
 | [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md) | Adversaries, mitigations, honest limits |
 | [docs/TRACK_ANSWERS.md](./docs/TRACK_ANSWERS.md) | Hack Privacy proof notes; agent proof as support |
 | [docs/ECOSYSTEM.md](./docs/ECOSYSTEM.md) | Passkey-Kit, Smart Account Kit, OZ Relayer |

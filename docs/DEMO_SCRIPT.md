@@ -11,11 +11,17 @@ infrastructure, not as a general privacy app:
 2. Three judges submit sealed scores.
 3. No judge or operator can read scores before reveal.
 4. Drand opens the final scoring set at the shared reveal time.
-5. Soroban settles the result/refunds deterministically.
-6. The organizer can publish a verifiable round receipt.
+5. Encrypted round/submission metadata is stored on Walrus before the normal
+   Soroban action continues.
+6. Soroban settles the result/refunds deterministically.
+7. The organizer can publish a verifiable round receipt with a Walrus reference.
 
 The current live case proves the sealed-scoring primitive. The recorded
 evidence view proves the contract lifecycle, settlement, and public audit path.
+
+For the Walrus-backed flow, keep the framing tight: Sub Rosa still uses
+Stellar/Soroban for fairness, reveal, proof references, and settlement. Walrus
+stores encrypted heavy metadata only.
 
 ## 1. Showcase (30s)
 
@@ -34,8 +40,20 @@ evidence view proves the contract lifecycle, settlement, and public audit path.
 ## 3. Flow (30s)
 
 - Lifecycle timeline: create → commit → wait R → open → reveal → clear → settle
+- On create, point out the small storage status: encrypted metadata stored on
+  Walrus, compact reference attached on Soroban.
 - Drand banner shows R status
 - Settlement stats: contract balance → 0
+
+## Live wallet route (45s)
+
+- **Freighter route:** Freighter is the active Stellar account. The app stores
+  encrypted metadata on Walrus, then Freighter signs the normal Soroban action.
+- **RainbowKit route:** RainbowKit is the active EVM account for the Bosphor
+  storage intent. It does not sign Soroban transactions.
+- The user should see only one active route at a time.
+- No fake storage: if Walrus/Bosphor config is missing, the action is blocked
+  with setup text.
 
 ## 4. Agents + x402 (60s)
 
@@ -81,6 +99,14 @@ VITE_RPC_URL=https://soroban-testnet.stellar.org
 
 Toggle **Poll live contract** on Showcase.
 
+For live Walrus-backed round creation, use a contract that exposes
+`attach_storage_ref`, for example the current testnet dev contract:
+
+```
+VITE_CONTRACT_ID=CC6ROZCIXFTMB47TIWPRKPEHBGI2DSDOONPY47ETVLHUN327EEGJE6UK
+VITE_WALRUS_PUBLISHER_URL=https://publisher.walrus-testnet.walrus.space
+```
+
 ## CLI proof (if asked)
 
 ```bash
@@ -93,6 +119,7 @@ pnpm keeper:watch
 ## Docs for judges
 
 - [TECH_DESIGN.md](./TECH_DESIGN.md)
+- [WALRUS_STORAGE.md](./WALRUS_STORAGE.md)
 - [THREAT_MODEL.md](./THREAT_MODEL.md)
 - [TRACK_ANSWERS.md](./TRACK_ANSWERS.md)
 - [ECOSYSTEM.md](./ECOSYSTEM.md)

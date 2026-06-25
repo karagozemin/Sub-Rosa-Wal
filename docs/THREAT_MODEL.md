@@ -9,6 +9,9 @@
 | Escrow | On-chain persistent | High — funds at stake |
 | Bidder identity | Auditor blob (temporary) | Medium — selective disclosure |
 | Drand round R | Round record | Public — coordination clock |
+| Encrypted metadata payload | Walrus blob | Medium — heavy context/evidence remains encrypted |
+| Storage reference | Soroban persistent storage | Medium — binds round to external encrypted payload |
+| Bosphor intent | EVM chain + Bosphor route | Medium — storage availability/reference |
 | Session mandate | Off-chain agent | Medium — caps delegation |
 | Principal key | Off-chain | Critical — not used on-chain in agent flow |
 
@@ -20,6 +23,8 @@
 4. **Appraisal server** — could overcharge or return biased valuations
 5. **Malicious agent** — tries to exceed mandate caps
 6. **Auditor** — learns identities; must not learn bids before R if honest protocol followed
+7. **Storage route failure** — Walrus/Bosphor unavailable or wrong blob reference returned
+8. **Wallet route confusion** — user signs with a wallet that cannot perform the intended layer's action
 
 ## Protections
 
@@ -54,6 +59,15 @@
 | Public learns bidder names | Identity only in auditor blob | Values public after reveal by design |
 | Wrong auditor reads blob | X25519 AEAD to round auditor pubkey | Auditor key compromise exposes identities |
 
+### Walrus storage layer
+
+| Threat | Mitigation | Residual |
+| --- | --- | --- |
+| Fake blob id or fake intent id | Main app flow requires real storage adapter result; no mock storage backend | UI can only prove what configured route returns |
+| Wrong payload bound to round | `content_hash` and `commitment_hash` are attached on Soroban with blob/intent reference | Users must preserve reveal material if later decryption is needed |
+| Walrus/Bosphor unavailable | Create flow blocks when storage configuration is missing or route fails | Availability depends on selected storage route |
+| Wallet route confusion | UI exposes one active route: Freighter for Stellar, RainbowKit for Bosphor intent | EVM route still cannot replace Soroban settlement logic |
+
 ### Agent / mandate
 
 | Threat | Mitigation | Residual |
@@ -69,6 +83,7 @@
 3. **tlock-js / noble crypto** — correct seal/open implementation (tested)
 4. **Agent software** — enforces mandate caps before submit
 5. **USDC SAC** — standard SEP-41 behavior
+6. **Walrus/Bosphor route** — stores encrypted bytes and returns the referenced blob/intent data
 
 ## Out of scope (honest limits)
 
@@ -76,6 +91,8 @@
 - x402 appraisal price is not on-chain
 - Passkey-Kit wallet demo is wired, but agent mandate enforcement is not moved to Passkey policies
 - OZ Relayer Channels adapter is optional; direct RPC remains the proven critical path
+- Walrus does not enforce Sub Rosa fairness, reveal, or settlement; it is only encrypted storage
+- Stellar/Soroban does not directly call Walrus or Bosphor
 
 ## Auditor UI
 

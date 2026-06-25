@@ -8,10 +8,20 @@ See [ARCHITECTURE.md](../ARCHITECTURE.md) for the system overview. This document
 
 Sub Rosa is a **sealed commit–reveal coordination primitive** on Stellar Soroban. Participants lock escrow and submit timelock-encrypted bids; a public Drand round R forces simultaneous decryption; the contract clears and settles deterministically.
 
+The Walrus layer does not replace Stellar. Before important round/submission
+actions, the app encrypts heavier metadata client-side and stores it through the
+configured Walrus route. Soroban receives only compact proof/reference fields.
+
 ## Architecture
 
 ```
-┌─────────────┐     sealBid (tlock)      ┌──────────────────┐
+┌─────────────┐     encrypt metadata     ┌──────────────────┐
+│ Operator /  │ ───────────────────────► │ Walrus storage   │
+│ App         │     store, receipt       │ route            │
+└──────┬──────┘                          └────────┬─────────┘
+       │ create_round + attach_storage_ref         │ blobId / intentId
+       ▼                                           │
+┌─────────────┐     sealBid (tlock)      ┌────────▼─────────┐
 │ Bidder /    │ ───────────────────────► │ Round contract   │
 │ Agent       │     commit(H,C,blob)     │ (Soroban)        │
 └─────────────┘                          └────────┬─────────┘
@@ -19,8 +29,8 @@ Sub Rosa is a **sealed commit–reveal coordination primitive** on Stellar Sorob
        ▼                                          │ open_reveal(BLS sig)
 ┌─────────────┐                          ┌────────▼─────────┐
 │ Appraisal   │                          │ Keeper (anyone)  │
-│ API         │                          │ reveal → clear   │
-└─────────────┘                          │ → settle         │
+│ API         │                          │ reveal -> clear  │
+└─────────────┘                          │ -> settle        │
                                            └──────────────────┘
 ```
 
@@ -28,13 +38,13 @@ Sub Rosa is a **sealed commit–reveal coordination primitive** on Stellar Sorob
 
 | Package | Role |
 | --- | --- |
-| `contracts/round` | Soroban Round — storage, BLS verify, SAC settle |
+| `contracts/round` | Soroban Round — storage refs, BLS verify, SAC settle |
 | `packages/tlock` | Off-chain seal: `sealBid` / `openBid`, auditor blob |
 | `packages/sdk` | `SubRosaClient` — bindings + direct RPC or optional OZ Channels submit |
 | `services/keeper` | Permissionless open/reveal/clear/settle (+ watch mode) |
 | `services/appraisal-api` | x402-gated appraisal (SEP-41 USDC) |
 | `services/agent` | Multi-agent bidders with session mandates |
-| `apps/web` | Jury demo UI |
+| `apps/web` | Jury demo UI, wallet routes, client encryption, Walrus receipt status |
 
 ## Cryptography
 
@@ -51,6 +61,18 @@ Sub Rosa is a **sealed commit–reveal coordination primitive** on Stellar Sorob
 - Stored in temporary contract storage alongside ciphertext
 - Only the round's designated auditor secret can decrypt
 
+### Walrus metadata payloads
+
+- AES-GCM encryption happens in the browser before storage.
+- The app computes `content_hash` over the encrypted payload bytes.
+- The app computes `commitment_hash` from the content hash plus route metadata.
+- The encrypted payload is stored through one configured route:
+  - **Stellar route:** direct Walrus publisher, with Freighter signing Soroban.
+  - **EVM route:** RainbowKit/wagmi signs a Bosphor storage intent, then Soroban
+    still needs a Stellar signer for proof recording.
+- The app must not generate fake blob ids, fake intent ids, or use localStorage
+  as a Walrus substitute.
+
 ### On-chain BLS
 
 Deploy constants validated via `services/drand-tools` against live quicknet. Contract rejects wrong-round signatures and malformed G1 points.
@@ -60,8 +82,32 @@ Deploy constants validated via `services/drand-tools` against live quicknet. Con
 | Tier | Contents | Rationale |
 | --- | --- | --- |
 | Instance | Drand pubkey, DST, genesis, period, USDC SAC | Global config |
-| Persistent | Round record, per-bidder state (escrow, revealed value) | Survives until settle/void |
+| Persistent | Round record, storage reference, per-bidder state (escrow, revealed value) | Survives until settle/void |
 | Temporary | Ciphertext + auditor blob | Auto-expire after reveal window |
+
+### Storage reference record
+
+Walrus-backed rounds require a contract build that exposes:
+
+```rust
+attach_storage_ref(
+  round_id,
+  operator,
+  content_hash,
+  commitment_hash,
+  storage_provider,
+  intent_id,
+  blob_id,
+  end_epoch,
+)
+```
+
+The receipt is intentionally compact. The encrypted bytes remain on Walrus; the
+Soroban contract stores only the provider/reference fields needed to bind the
+round to that external storage object.
+
+Older deployed contracts that do not expose `attach_storage_ref` can still run
+the base Sub Rosa lifecycle, but they cannot bind a Walrus receipt on-chain.
 
 ## Settlement rails
 

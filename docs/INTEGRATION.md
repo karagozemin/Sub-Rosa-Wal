@@ -1,8 +1,9 @@
 # Integrating Sub Rosa
 
 Sub Rosa does not require users to come to the Sub Rosa demo app. The demo app
-is a showcase. The intended product surface is a Soroban contract plus
-TypeScript packages that other Stellar apps can embed.
+is a showcase. The intended product surface is a Soroban contract, TypeScript
+packages, and an application-layer Walrus storage route that other apps can
+embed.
 
 ## Target integration
 
@@ -15,14 +16,18 @@ to npm is a release step, not a protocol requirement.
 
 ## What an app integrates
 
-An integrating app usually needs four pieces:
+An integrating app usually needs five pieces:
 
 | Piece | Role |
 | --- | --- |
-| Round contract | Stores commitments, ciphertext, escrow, deadlines, Drand R, reveal state |
+| Round contract | Stores commitments, escrow, deadlines, Drand R, reveal state, and compact storage references |
 | `@sub-rosa/sdk` | Creates rounds and submits contract calls from app backend/frontend |
 | `@sub-rosa/tlock` | Seals values to Drand R and opens ciphertext after R |
+| Walrus storage route | Stores encrypted heavy metadata/submission payloads before the Soroban action |
 | Keeper | Opens reveal and settles when Drand R is live; permissionless by design |
+
+Walrus is not the transaction layer. Stellar/Soroban remains responsible for
+round lifecycle, proof references, reveal, clearing, escrow, and settlement.
 
 ## Minimal flow
 
@@ -36,6 +41,24 @@ const client = new SubRosaClient({
   networkPassphrase,
   contractId,
   secretKey,
+});
+
+// Before creating or updating an important round object, encrypt metadata in
+// the browser/app layer and store it through the configured Walrus route.
+const storageReceipt = await storageAdapter.storeEncryptedPayload({
+  payload,
+  contentHash,
+  commitmentHash,
+});
+
+await client.attachStorageRef({
+  roundId,
+  contentHash: storageReceipt.contentHash,
+  commitmentHash: storageReceipt.commitmentHash,
+  storageProvider: storageReceipt.storageProvider,
+  intentId: storageReceipt.intentId ?? "",
+  blobId: storageReceipt.blobId,
+  endEpoch: storageReceipt.endEpoch,
 });
 
 const sealed = await sealBid({
@@ -56,6 +79,27 @@ await client.commit({
 
 After Drand round `R` is published, any keeper or participant can submit the
 Drand signature, reveal valid entries, clear the round, and settle escrow.
+
+## Wallet routes
+
+| Route | Wallet | What it signs |
+| --- | --- | --- |
+| Stellar route | Freighter | Soroban `create_round`, `attach_storage_ref`, commit, reveal, settle |
+| EVM route | RainbowKit / wagmi | Bosphor storage intent only |
+
+Freighter cannot sign Bosphor EVM transactions. RainbowKit/EVM wallets cannot
+sign Soroban transactions. If an app offers both routes, keep them explicit so
+the user understands which account is active.
+
+## Walrus integration requirements
+
+- The app must receive a real Walrus blob id from the selected storage route.
+- The main app flow must not generate fake Walrus blob ids or fake Bosphor
+  intent ids.
+- `localStorage` can cache recent receipts for UI convenience, but it must not
+  act as the storage backend.
+- A Soroban contract used for Walrus-backed rounds must expose
+  `attach_storage_ref(...)` and `get_storage_ref(round_id)`.
 
 ## Allocation use cases
 
