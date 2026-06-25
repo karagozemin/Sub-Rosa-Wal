@@ -48,7 +48,7 @@ export function LandingPage({
           <span className="landing-status-pill winner">Hack Privacy #1</span>
           <span className="landing-status-pill">testnet · live</span>
           <a href="#/storage">Walrus layer</a>
-          <a href="https://github.com/karagozemin/Sub-Rosa" target="_blank" rel="noreferrer">
+          <a href="https://github.com/karagozemin/Sub-Rosa-Wal" target="_blank" rel="noreferrer">
             GitHub
           </a>
           <button type="button" className="primary-action compact" onClick={onDemo}>
@@ -66,23 +66,24 @@ export function LandingPage({
         <motion.div className="hero-copy" variants={fadeUp} transition={transition}>
           <span className="hero-eyebrow">
             <span>SR</span>
-            Verifiable allocation on Stellar
+            Sub Rosa Walrus layer
           </span>
           <motion.h1 variants={fadeUp} transition={transition}>
-            Verifiable allocation. <em>Sealed by design.</em>
+            Encrypted storage for sealed submissions.
           </motion.h1>
           <motion.p className="lede" variants={fadeUp} transition={transition}>
-            Infrastructure for Stellar grants, bounties, hackathons, sealed auctions, and RFP
-            scoring.
+            Sub Rosa keeps fairness, reveal, proof references, escrow, and settlement on
+            Stellar/Soroban. Walrus carries the encrypted metadata, evidence, notes, and scoring
+            payloads that should not live in contract state.
           </motion.p>
           <motion.p className="hero-infra-line" variants={fadeUp} transition={transition}>
-            Scores, bids, and allocation inputs stay unreadable until Drand R, then reveal and
-            settle publicly on Soroban.
+            Choose one active wallet route: Freighter stores encrypted payloads on Walrus before
+            the normal Soroban action, while RainbowKit signs Bosphor intents into Walrus.
           </motion.p>
 
           <motion.div className="hero-actions" variants={fadeUp} transition={transition}>
             <button type="button" className="primary-action large" onClick={onDemo}>
-              Open sealed grant scoring demo
+              Open Walrus-backed demo
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path
                   d="M5 12h14M13 6l6 6-6 6"

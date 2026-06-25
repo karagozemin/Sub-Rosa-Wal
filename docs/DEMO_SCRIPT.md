@@ -2,19 +2,21 @@
 
 Walkthrough for `pnpm web:dev` (default http://localhost:5173).
 
-## Primary narrative: verifiable grant allocation
+## Primary narrative: Walrus-backed sealed submissions
 
-Open the **Grant Allocation** case first. Frame the product as allocation
-infrastructure, not as a general privacy app:
+Open the demo by framing this repo as the **Sub Rosa Walrus storage layer**,
+not as a generic upload app and not as a replacement for Stellar:
 
-1. Five projects enter a grant round.
-2. Three judges submit sealed scores.
-3. No judge or operator can read scores before reveal.
-4. Drand opens the final scoring set at the shared reveal time.
-5. Encrypted round/submission metadata is stored on Walrus before the normal
-   Soroban action continues.
-6. Soroban settles the result/refunds deterministically.
-7. The organizer can publish a verifiable round receipt with a Walrus reference.
+1. A user creates or joins a sealed Sub Rosa round.
+2. The browser encrypts round/submission metadata before any chain action.
+3. Walrus stores the encrypted payload.
+4. Freighter route attaches a compact Walrus reference to Soroban.
+5. RainbowKit route records a real Bosphor storage intent and uses the
+   `intentId` as the shareable storage-backed round id.
+6. Drand and Soroban still handle the canonical commit, reveal, proof
+   reference, escrow, and settlement path on the Stellar route.
+7. The organizer can publish a verifiable receipt that separates encrypted
+   payload storage from settlement.
 
 The current live case proves the sealed-scoring primitive. The recorded
 evidence view proves the contract lifecycle, settlement, and public audit path.
@@ -25,8 +27,7 @@ stores encrypted heavy metadata only.
 
 ## 1. Showcase (30s)
 
-- **Opening:** verifiable allocation for grants, hackathons, bounties, RFPs,
-  and sealed auctions
+- **Opening:** encrypted Walrus storage for Sub Rosa sealed submissions
 - **Mainnet proof card:** settled round 1 on real XLM (link to stellar.expert)
 - **Drand chip:** live countdown to recorded testnet R (from `demo-trace.generated.ts`)
 

@@ -1,12 +1,19 @@
-# Sub Rosa — Architecture
+# Sub Rosa Walrus Storage Layer — Architecture
 
-High-level map of the monorepo: components, trust boundaries, round lifecycle, and where each proof runs. For crypto and settlement detail see [docs/TECH_DESIGN.md](./docs/TECH_DESIGN.md).
+High-level map of the Walrus-backed storage layer, wallet routes, trust
+boundaries, round lifecycle, and where each proof runs. For crypto and
+settlement detail see [docs/TECH_DESIGN.md](./docs/TECH_DESIGN.md).
 
 ---
 
 ## Problem and primitive
 
-Sub Rosa is a **sealed commit–reveal coordination primitive** on Stellar Soroban. Participants commit now; a public Drand round **R** forces simultaneous opening later; the contract clears and settles without operator discretion.
+Sub Rosa is a **sealed commit–reveal coordination primitive** whose canonical
+transaction layer is Stellar Soroban. The Walrus extension adds encrypted,
+verifiable payload storage for the metadata and evidence around those sealed
+submissions. Participants commit now; a public Drand round **R** forces
+simultaneous opening later; the contract clears and settles without operator
+discretion.
 
 | Phase | Who acts | What happens |
 | --- | --- | --- |
@@ -23,7 +30,7 @@ The operator does **not** need keys to open bids. After R, values are public; id
 
 ## System diagram
 
-Sub Rosa separates the **truth layer** from the **payload layer**:
+Sub Rosa Walrus separates the **truth layer** from the **payload layer**:
 
 - Stellar/Soroban stores commitments, reveal gates, escrow, clearing, settlement,
   and compact storage references.

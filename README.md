@@ -2,33 +2,57 @@
   <img src="./assets/sub-rosa-readme.png" width="250" alt="Sub Rosa logo" />
 </p>
 
-# Sub Rosa
+# Sub Rosa Walrus Storage Layer
 
-**1st Place — Hack Privacy Track, Build On Stellar Hackathon — IBW 2026**
+**Encrypted Walrus storage for Sub Rosa sealed submissions.**
 
-**Verifiable allocation infrastructure for Stellar grants, hackathons,
-bounties, RFPs, and sealed auctions.** Participants submit sealed scores, bids,
-or allocation decisions now; a public, unbiased Drand round unseals them later,
-verifiably and all at once. The protocol — not the operator — owns fairness.
+This repo extends Sub Rosa with a real Walrus-backed storage layer for sealed
+round metadata, encrypted submissions, scoring JSON, appraisal reports, judge
+notes, and evidence files. The product is deliberately not a generic upload app:
+the full payload is encrypted client-side and stored on Walrus, while compact
+proof/reference fields remain attached to the Sub Rosa protocol flow.
 
-> Built on what's proven. Sealed by math, not by trust.
+> Heavy data on Walrus. Fairness and settlement stay on Sub Rosa.
 
-Sub Rosa is now evolving from a hackathon-winning privacy demo into reusable
-allocation infrastructure for Stellar apps: a Soroban primitive, TypeScript
-SDK, keeper service, and integration templates for teams that need sealed
-judging, scoring, bidding, or allocation without building cryptography from
-scratch.
+The separation is the point:
 
-Target next milestone: **Stellar Community Fund Build Award**. The goal is to
-turn the current proof into production-ready developer infrastructure:
-`@sub-rosa/sdk`, optional React hooks/components, hosted keeper/reveal
-operations, hardened contracts, and mainnet launch.
+- **Walrus** stores encrypted heavy payloads.
+- **Bosphor** provides the EVM-to-Walrus storage intent route.
+- **Stellar/Soroban** remains the commitment, reveal, proof reference, escrow,
+  clearing, and settlement layer for the canonical Sub Rosa flow.
+- **Freighter and RainbowKit are separate wallet routes.** Freighter signs
+  Stellar/Soroban actions. RainbowKit/MetaMask signs Bosphor storage intents.
 
 Licensed under [MIT](./LICENSE).
 
 ---
 
-## Proof at a glance
+## What this repo demonstrates
+
+```text
+Browser
+  encrypts sealed Sub Rosa metadata
+      │
+      ├─ Freighter route
+      │    -> Walrus publisher returns blobId / endEpoch
+      │    -> Soroban create_round + attach_storage_ref
+      │    -> commit / reveal / settle stay on Stellar
+      │
+      └─ RainbowKit route
+           -> Bosphor submitIntent on EVM
+           -> IntentSubmitted(intentId)
+           -> intentId is the shareable storage-backed round id
+           -> later sealed score/reveal metadata use more Bosphor intents
+```
+
+The app does not generate fake Walrus blob ids, fake Bosphor intent ids, fake
+Stellar transaction ids, or use `localStorage` as a storage backend. Missing
+Walrus/Bosphor/Soroban configuration blocks the relevant action instead of
+pretending a storage proof exists.
+
+---
+
+## Underlying Sub Rosa proofs
 
 | Layer | Command | Network | What it proves |
 | --- | --- | --- | --- |
@@ -42,25 +66,23 @@ See [docs/LIMITATIONS.md](./docs/LIMITATIONS.md) for honest scope (mainnet ≠ f
 
 ---
 
-## Pilot plan
+## Where this plugs in
 
-Sub Rosa's first pilot will run with **OverBlock** as an internal
-builder/community environment for sealed judging, bounty allocation, and
-grant-style scoring workflows.
+Sub Rosa can sit under allocation, judging, scoring, sealed-bid, appraisal, or
+evidence-heavy workflows. This Walrus layer gives those workflows a place to
+put encrypted payloads that are too large or too sensitive for contract state,
+without moving fairness or settlement away from Sub Rosa.
 
-Beyond OverBlock, we are actively preparing external pilot conversations with
-Stellar ecosystem teams, hackathon organizers, DAOs, and grant/RFP programs
-that need sealed scoring, sealed bidding, or verifiable allocation workflows.
-
-See [docs/PILOT_PLAYBOOK.md](./docs/PILOT_PLAYBOOK.md) for the pilot scope,
-SCF-style demo narrative, and outreach message.
+The original hackathon-winning Sub Rosa protocol proof is still present in this
+monorepo: Soroban contracts, TypeScript SDK, keeper service, tlock encryption,
+x402 appraisal proof, and mainnet/testnet proof commands.
 
 ---
 
-## Integration model
+## Protocol integration model
 
-Sub Rosa is not only a hosted frontend. Other Stellar applications can embed
-the primitive directly:
+Other applications can embed the Sub Rosa primitive directly and add Walrus
+storage at the application layer:
 
 ```bash
 npm install @sub-rosa/sdk
@@ -89,8 +111,9 @@ const sealed = await sealBid({
 await client.commit({ roundId, sealed, escrow });
 ```
 
-The app layer can be a DAO tool, grants platform, auction UI, RFP workflow, or
-allocation dashboard. Sub Rosa supplies the sealed round state machine.
+The application can be a DAO tool, judging panel, sealed auction, RFP workflow,
+or evidence-heavy review system. Sub Rosa supplies the sealed round state
+machine; Walrus supplies encrypted payload availability.
 
 ---
 
@@ -124,11 +147,11 @@ pnpm mainnet:micro           # dry-run checklist; --execute needs MAINNET_CONFIR
 
 ## The idea
 
-Public ledgers are transparent by default, which quietly breaks fair allocation
-when participants or judges can see each other's inputs too early. That affects
-grant scoring, hackathon judging, bounty allocation, RFPs, and sealed auctions.
-The usual "fix" trusts the operator. Sub Rosa removes the operator from the
-trust path entirely:
+Public ledgers are transparent by default, but sealed coordination needs two
+things at once: compact on-chain proof and private heavy data. The usual "fix"
+puts payloads in a centralized database and asks users to trust the operator.
+This repo replaces that storage assumption with encrypted Walrus payloads while
+leaving Sub Rosa's settlement and reveal logic on Stellar/Soroban:
 
 - **Seal** each bid with Drand timelock encryption (`tlock`) to a future round R.
 - **Force-open** at R: BLS12-381 verified **on-chain** — simultaneous reveal.
@@ -233,7 +256,7 @@ pnpm mainnet:verify         # mainnet read-only proof
 | [docs/DEPLOY.md](./docs/DEPLOY.md) | Env: UI build vs runtime secrets |
 | [docs/LIMITATIONS.md](./docs/LIMITATIONS.md) | Known scope boundaries |
 
-## Status (submission)
+## Current implementation status
 
 - [x] Round contract + storage proof reference + on-chain Drand BLS
 - [x] tlock + auditor blob (13 tests)
@@ -245,13 +268,13 @@ pnpm mainnet:verify         # mainnet read-only proof
 - [x] Jury UI — one canonical testnet trace (status, bidders, R, auditor blobs, session keys)
 - [x] Watch-mode keeper (`pnpm keeper:watch`)
 
-## SCF roadmap
+## Core protocol roadmap
 
 | Tranche | Goal | Deliverables |
 | --- | --- | --- |
-| 1 | Developer infrastructure | Publish-ready `@sub-rosa/sdk`, integration docs, contract hardening, test vectors |
-| 2 | Testnet pilots | Hosted keeper, reusable UI hooks/components, partner pilot templates, testnet dashboards |
-| 3 | Mainnet launch | Audited/open-source contracts, mainnet deployment, production keeper ops, launch docs |
+| 1 | Storage hardening | Production Walrus/Bosphor adapters, receipt indexing, richer proof explorer |
+| 2 | Stellar proof hardening | Contract storage reference audits, hosted keeper, reusable UI hooks/components |
+| 3 | Mainnet launch | Audited/open-source contracts, production keeper ops, deployment docs |
 
 ## Cryptographic design (Privacy track)
 
