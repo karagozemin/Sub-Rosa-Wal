@@ -180,18 +180,18 @@ function PhaseGuide(props: {
   let showJoin = false;
 
   if (walletRoute === "bosphor-walrus" && storageReceipt) {
-    tone = storageReceipt.status === "pending" ? "wait" : "complete";
-    eyebrow = storageReceipt.status === "pending" ? "Bosphor intent submitted" : "Walrus receipt ready";
-    title = storageReceipt.status === "pending" ? "Storage intent pending" : "Encrypted metadata stored";
+    tone = "complete";
+    eyebrow = storageReceipt.status === "submitted" ? "Bosphor intent submitted" : "Walrus receipt ready";
+    title = storageReceipt.status === "submitted" ? "Storage intent submitted" : "Encrypted metadata stored";
     detail =
-      storageReceipt.status === "pending"
-        ? "The EVM transaction is confirmed. Waiting for Bosphor to emit IntentExecuted with the Walrus proof."
+      storageReceipt.status === "submitted"
+        ? "The EVM transaction is confirmed. Walrus proof can be checked separately when Bosphor emits IntentExecuted."
         : "Bosphor returned the Walrus storage proof. Stellar/Soroban proof and settlement remain separate.";
-    timerLabel = storageReceipt.status === "pending" ? "Intent" : "Blob";
+    timerLabel = storageReceipt.status === "submitted" ? "Tx" : "Blob";
     timerValue = shortAddr(storageReceipt.walrusBlobId || storageReceipt.intentId || storageReceipt.evmTxHash, 6);
-    ctaLabel = storageReceipt.status === "pending" ? "Check Bosphor proof" : "Storage ready";
+    ctaLabel = storageReceipt.status === "submitted" ? "Check Walrus proof" : "Storage ready";
     cta = checkStorageProof;
-    ctaDisabled = storageReceipt.status !== "pending" || working;
+    ctaDisabled = storageReceipt.status !== "submitted" || working;
   } else if (!address && walletRoute === "bosphor-walrus" && evm.connected) {
     tone = "ready";
     eyebrow = "Storage route";
@@ -581,8 +581,8 @@ function FeedbackPanel({
 
   const escrowLabel = commitValue == null ? "—" : formatDemoAmount(commitValue);
   const storageLabel =
-    storageReceipt?.status === "pending"
-      ? "Bosphor pending"
+    storageReceipt?.status === "submitted"
+      ? "Bosphor intent"
       : storageReceipt
         ? "Bosphor → Walrus"
         : "—";

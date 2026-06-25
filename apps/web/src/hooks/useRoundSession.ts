@@ -325,8 +325,8 @@ export function useRoundSession(
       toast.dismiss(storageToastId);
       const receiptRef = storageReceipt.walrusBlobId || storageReceipt.intentId || storageReceipt.evmTxHash;
       push(
-        storageReceipt.status === "pending"
-          ? `Bosphor intent submitted · ${receiptRef.slice(0, 10)}… · waiting for IntentExecuted proof`
+        storageReceipt.status === "submitted"
+          ? `Bosphor intent submitted · ${receiptRef.slice(0, 10)}…`
           : `Walrus storage proof received · ${receiptRef.slice(0, 10)}…`,
         id,
       );
@@ -341,24 +341,24 @@ export function useRoundSession(
         });
         setStatus("ok");
         const msg =
-          storageReceipt.status === "pending"
+          storageReceipt.status === "submitted"
             ? `Bosphor intent submitted · ${storageReceipt.evmTxHash.slice(0, 10)}…`
             : `Bosphor → Walrus receipt created · ${receiptRef.slice(0, 10)}…`;
         push(
-          storageReceipt.status === "pending"
-            ? "Bosphor accepted the EVM transaction. The Walrus blob proof has not executed yet; retry/status polling can attach it after IntentExecuted appears."
+          storageReceipt.status === "submitted"
+            ? "EVM route submitted a real Bosphor storage intent. Walrus proof is optional follow-up and has not appeared yet."
             : "EVM route stored encrypted metadata. Stellar proof/settlement is not signed by MetaMask.",
           id,
         );
         toast.dismiss(workingId);
         toast.push(
-          storageReceipt.status === "pending" ? "info" : "success",
-          storageReceipt.status === "pending" ? "Bosphor intent pending" : "Walrus storage ready",
+          "success",
+          storageReceipt.status === "submitted" ? "Bosphor intent submitted" : "Walrus storage ready",
           msg,
         );
         return;
       }
-      if (storageReceipt.status === "pending" || !storageReceipt.walrusBlobId) {
+      if (storageReceipt.status !== "executed" || !storageReceipt.walrusBlobId) {
         throw new Error(
           "Bosphor intent is pending. Wait for IntentExecuted proof before attaching the storage reference on Stellar.",
         );
@@ -443,7 +443,7 @@ export function useRoundSession(
           ? "IntentExecuted has not appeared yet. Bosphor accepted the intent, but Walrus proof is still pending."
           : "The Bosphor transaction is confirmed, but this receipt did not expose an IntentExecuted proof or intent id yet.";
         push(msg, id);
-        toast.push("info", "Still pending", msg);
+        toast.push("info", "Proof not ready", msg);
       }
     } catch (error) {
       const msg = displayError(error);

@@ -1,6 +1,6 @@
 export type StorageReceipt = {
   storageProvider: "bosphor-walrus" | "walrus";
-  status?: "pending" | "executed";
+  status?: "submitted" | "executed";
   intentId: string;
   evmTxHash: string;
   walrusBlobId: string;

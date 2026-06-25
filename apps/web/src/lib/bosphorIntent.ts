@@ -185,7 +185,7 @@ export async function submitBosphorIntent({
   if (!executedProof) {
     return {
       storageProvider: "bosphor-walrus",
-      status: "pending",
+      status: "submitted",
       intentId: "",
       evmTxHash,
       walrusBlobId: "",
@@ -197,7 +197,7 @@ export async function submitBosphorIntent({
 
   return withExecutedProof({
     storageProvider: "bosphor-walrus",
-    status: "pending",
+    status: "submitted",
     intentId: executedProof.intentId,
     evmTxHash,
     walrusBlobId: "",
