@@ -65,7 +65,15 @@ function makePayload(input: BosphorSubmissionPayload): Hex {
   );
 }
 
-function findIntentExecuted(logs: Array<{ topics: readonly Hex[]; data: Hex }>, intentId: Hex) {
+type ExecutedIntentProof = {
+  intentId: Hex;
+  proof: Hex;
+};
+
+function findIntentExecuted(
+  logs: Array<{ topics: readonly Hex[]; data: Hex }>,
+  intentId?: Hex,
+): ExecutedIntentProof | null {
   for (const log of logs) {
     try {
       const decoded = decodeEventLog({
@@ -73,8 +81,11 @@ function findIntentExecuted(logs: Array<{ topics: readonly Hex[]; data: Hex }>, 
         data: log.data,
         topics: log.topics as unknown as [Hex, ...Hex[]],
       });
-      if (decoded.eventName === "IntentExecuted" && decoded.args.intentId === intentId) {
-        return decoded.args.proof;
+      if (
+        decoded.eventName === "IntentExecuted" &&
+        (!intentId || decoded.args.intentId.toLowerCase() === intentId.toLowerCase())
+      ) {
+        return { intentId: decoded.args.intentId, proof: decoded.args.proof };
       }
     } catch {
       continue;
@@ -83,18 +94,19 @@ function findIntentExecuted(logs: Array<{ topics: readonly Hex[]; data: Hex }>, 
   return null;
 }
 
-function withExecutedProof(receipt: BosphorProofReceipt, executedProof: Hex): BosphorProofReceipt {
+function withExecutedProof(receipt: BosphorProofReceipt, executed: ExecutedIntentProof): BosphorProofReceipt {
   const [walrusBlobId, endEpoch] = decodeAbiParameters(
     [
       { name: "blobId", type: "bytes32" },
       { name: "endEpoch", type: "uint256" },
     ],
-    executedProof,
+    executed.proof,
   );
 
   return {
     ...receipt,
     status: "executed",
+    intentId: executed.intentId,
     walrusBlobId,
     endEpoch: endEpoch.toString(),
     timestamp: new Date().toISOString(),
@@ -119,6 +131,7 @@ export async function fetchBosphorIntentExecution({
     if (sameReceiptProof) return withExecutedProof(receipt, sameReceiptProof);
   }
 
+  if (!receipt.intentId) return receipt;
   const logs = await publicClient.getLogs({
     address: adapter,
     event: INTENT_EXECUTED_EVENT,
@@ -127,7 +140,7 @@ export async function fetchBosphorIntentExecution({
     toBlock: "latest",
   });
   const executedProof = logs.at(-1)?.args.proof;
-  return executedProof ? withExecutedProof(receipt, executedProof) : receipt;
+  return executedProof ? withExecutedProof(receipt, { intentId, proof: executedProof }) : receipt;
 }
 
 export async function submitBosphorIntent({
@@ -156,15 +169,6 @@ export async function submitBosphorIntent({
     args: [dstEid, payload, deadline, options],
   })) as readonly [bigint, bigint];
 
-  const { result: simulatedIntentId } = await publicClient.simulateContract({
-    address: adapter,
-    abi: BOSPHOR_ABI,
-    functionName: "submitIntent",
-    args: [dstEid, payload, deadline, options],
-    account,
-    value: nativeFee,
-  });
-
   const evmTxHash = await walletClient.sendTransaction({
     account,
     chain: null,
@@ -177,12 +181,12 @@ export async function submitBosphorIntent({
     }),
   });
   const txReceipt = await publicClient.waitForTransactionReceipt({ hash: evmTxHash });
-  const executedProof = findIntentExecuted(txReceipt.logs, simulatedIntentId);
+  const executedProof = findIntentExecuted(txReceipt.logs);
   if (!executedProof) {
     return {
       storageProvider: "bosphor-walrus",
       status: "pending",
-      intentId: simulatedIntentId,
+      intentId: "",
       evmTxHash,
       walrusBlobId: "",
       endEpoch: "",
@@ -194,7 +198,7 @@ export async function submitBosphorIntent({
   return withExecutedProof({
     storageProvider: "bosphor-walrus",
     status: "pending",
-    intentId: simulatedIntentId,
+    intentId: executedProof.intentId,
     evmTxHash,
     walrusBlobId: "",
     endEpoch: "",

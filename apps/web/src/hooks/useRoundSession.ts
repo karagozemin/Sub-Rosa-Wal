@@ -439,7 +439,9 @@ export function useRoundSession(
         push(msg, id);
         toast.push("success", "Walrus proof ready", msg);
       } else {
-        const msg = "IntentExecuted has not appeared yet. Bosphor accepted the intent, but Walrus proof is still pending.";
+        const msg = nextReceipt.intentId
+          ? "IntentExecuted has not appeared yet. Bosphor accepted the intent, but Walrus proof is still pending."
+          : "The Bosphor transaction is confirmed, but this receipt did not expose an IntentExecuted proof or intent id yet.";
         push(msg, id);
         toast.push("info", "Still pending", msg);
       }
