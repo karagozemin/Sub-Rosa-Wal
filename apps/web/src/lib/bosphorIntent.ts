@@ -5,7 +5,6 @@ import {
   encodeFunctionData,
   keccak256,
   parseAbi,
-  parseAbiItem,
   stringToHex,
   type Hex,
   type PublicClient,
@@ -18,7 +17,6 @@ const BOSPHOR_ABI = parseAbi([
   "function submitIntent(uint32 dstEid, bytes payload, uint256 deadline, bytes options) payable returns (bytes32 intentId)",
   "event IntentExecuted(bytes32 indexed intentId, bytes proof)",
 ]);
-const INTENT_EXECUTED_EVENT = parseAbiItem("event IntentExecuted(bytes32 indexed intentId, bytes proof)");
 
 export type BosphorProofReceipt = StorageReceipt & { storageProvider: "bosphor-walrus" };
 
@@ -83,33 +81,6 @@ function findIntentExecuted(logs: Array<{ topics: readonly Hex[]; data: Hex }>, 
   return null;
 }
 
-async function waitForIntentExecuted({
-  publicClient,
-  adapter,
-  intentId,
-  fromBlock,
-}: {
-  publicClient: PublicClient;
-  adapter: Hex;
-  intentId: Hex;
-  fromBlock: bigint;
-}) {
-  const deadline = Date.now() + 90_000;
-  while (Date.now() < deadline) {
-    const logs = await publicClient.getLogs({
-      address: adapter,
-      event: INTENT_EXECUTED_EVENT,
-      args: { intentId },
-      fromBlock,
-      toBlock: "latest",
-    });
-    const proof = logs.at(-1)?.args.proof;
-    if (proof) return proof;
-    await new Promise((resolve) => setTimeout(resolve, 3_000));
-  }
-  return null;
-}
-
 export async function submitBosphorIntent({
   walletClient,
   publicClient,
@@ -157,15 +128,7 @@ export async function submitBosphorIntent({
     }),
   });
   const txReceipt = await publicClient.waitForTransactionReceipt({ hash: evmTxHash });
-  const proof = findIntentExecuted(txReceipt.logs, simulatedIntentId);
-  const executedProof =
-    proof ??
-    (await waitForIntentExecuted({
-      publicClient,
-      adapter,
-      intentId: simulatedIntentId,
-      fromBlock: txReceipt.blockNumber,
-    }));
+  const executedProof = findIntentExecuted(txReceipt.logs, simulatedIntentId);
   if (!executedProof) {
     return {
       storageProvider: "bosphor-walrus",

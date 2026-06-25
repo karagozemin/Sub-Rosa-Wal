@@ -307,7 +307,7 @@ export function useRoundSession(
         "working",
         "Storing sealed metadata on Walrus…",
         activeRoute === "bosphor-walrus"
-          ? "Sign the Bosphor EVM storage intent."
+          ? "Approve MetaMask, then wait for the Bosphor transaction confirmation."
           : "Publishing encrypted metadata to the configured Walrus publisher.",
       );
       const storageReceipt: StorageReceipt =
