@@ -225,7 +225,11 @@ function PhaseGuide(props: {
     timerValue = "env";
     ctaLabel = "Missing env";
     ctaDisabled = true;
-  } else if ((walletRoute === "stellar-walrus" ? Boolean(address) : evm.connected) && roundId == null) {
+  } else if (
+    (walletRoute === "stellar-walrus"
+      ? Boolean(address) && roundId == null
+      : evm.connected && !storageReceipt)
+  ) {
     tone = "ready";
     eyebrow = "Step 1 · sealed round";
     title = "Create a round";
