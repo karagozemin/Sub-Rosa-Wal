@@ -322,7 +322,13 @@ export function useRoundSession(
               payload: storagePayload,
               contentHash: encrypted.contentHash,
             });
-      push(`Walrus storage proof received · ${storageReceipt.walrusBlobId.slice(0, 10)}…`, id);
+      const receiptRef = storageReceipt.walrusBlobId || storageReceipt.intentId || storageReceipt.evmTxHash;
+      push(
+        storageReceipt.status === "pending"
+          ? `Bosphor intent submitted · ${receiptRef.slice(0, 10)}… · waiting for IntentExecuted proof`
+          : `Walrus storage proof received · ${receiptRef.slice(0, 10)}…`,
+        id,
+      );
       if (activeRoute === "bosphor-walrus") {
         updateSession(id, {
           auditorPublicKey: auditor.publicKey,
@@ -333,11 +339,28 @@ export function useRoundSession(
           storageReceipt,
         });
         setStatus("ok");
-        const msg = `Bosphor → Walrus receipt created · ${storageReceipt.walrusBlobId.slice(0, 10)}…`;
-        push("EVM route stored encrypted metadata. Stellar proof/settlement is not signed by MetaMask.", id);
+        const msg =
+          storageReceipt.status === "pending"
+            ? `Bosphor intent submitted · ${storageReceipt.evmTxHash.slice(0, 10)}…`
+            : `Bosphor → Walrus receipt created · ${receiptRef.slice(0, 10)}…`;
+        push(
+          storageReceipt.status === "pending"
+            ? "Bosphor accepted the EVM transaction. The Walrus blob proof has not executed yet; retry/status polling can attach it after IntentExecuted appears."
+            : "EVM route stored encrypted metadata. Stellar proof/settlement is not signed by MetaMask.",
+          id,
+        );
         toast.dismiss(workingId);
-        toast.push("success", "Walrus storage ready", msg);
+        toast.push(
+          storageReceipt.status === "pending" ? "info" : "success",
+          storageReceipt.status === "pending" ? "Bosphor intent pending" : "Walrus storage ready",
+          msg,
+        );
         return;
+      }
+      if (storageReceipt.status === "pending" || !storageReceipt.walrusBlobId) {
+        throw new Error(
+          "Bosphor intent is pending. Wait for IntentExecuted proof before attaching the storage reference on Stellar.",
+        );
       }
       if (!stellarContract || !stellarAddress) {
         throw new Error("Connect Freighter to create and attach the Stellar/Soroban proof reference.");

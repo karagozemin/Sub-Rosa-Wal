@@ -167,7 +167,16 @@ export async function submitBosphorIntent({
       fromBlock: txReceipt.blockNumber,
     }));
   if (!executedProof) {
-    throw new Error("Bosphor intent was submitted, but IntentExecuted proof was not found in the transaction receipt yet.");
+    return {
+      storageProvider: "bosphor-walrus",
+      status: "pending",
+      intentId: simulatedIntentId,
+      evmTxHash,
+      walrusBlobId: "",
+      endEpoch: "",
+      payloadHash,
+      timestamp: new Date().toISOString(),
+    };
   }
   const [walrusBlobId, endEpoch] = decodeAbiParameters(
     [
@@ -179,6 +188,7 @@ export async function submitBosphorIntent({
 
   return {
     storageProvider: "bosphor-walrus",
+    status: "executed",
     intentId: simulatedIntentId,
     evmTxHash,
     walrusBlobId,

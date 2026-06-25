@@ -563,6 +563,17 @@ function FeedbackPanel({
           : "Ready";
 
   const escrowLabel = commitValue == null ? "—" : formatDemoAmount(commitValue);
+  const storageLabel =
+    storageReceipt?.status === "pending"
+      ? "Bosphor pending"
+      : storageReceipt
+        ? "Bosphor → Walrus"
+        : "—";
+  const blobLabel = storageReceipt
+    ? storageReceipt.walrusBlobId
+      ? shortAddr(storageReceipt.walrusBlobId, 6)
+      : shortAddr(storageReceipt.intentId || storageReceipt.evmTxHash, 6)
+    : "—";
 
   return (
     <motion.section
@@ -604,11 +615,11 @@ function FeedbackPanel({
         </div>
         <div>
           <small>storage</small>
-          <b>{storageReceipt ? "Bosphor → Walrus" : "—"}</b>
+          <b>{storageLabel}</b>
         </div>
         <div>
-          <small>blob</small>
-          <b>{storageReceipt ? shortAddr(storageReceipt.walrusBlobId, 6) : "—"}</b>
+          <small>{storageReceipt?.walrusBlobId ? "blob" : "intent"}</small>
+          <b>{blobLabel}</b>
         </div>
       </div>
     </motion.section>
