@@ -111,6 +111,7 @@ function PhaseGuide(props: {
   onEntryChange: (v: number) => void;
   connect: () => void;
   createRound: (durationSeconds: number) => void;
+  checkStorageProof: () => void;
   joinRound: (id: string) => void;
   commitEntry: () => void;
   openAndReveal: () => void;
@@ -136,6 +137,7 @@ function PhaseGuide(props: {
     onEntryChange,
     connect,
     createRound,
+    checkStorageProof,
     joinRound,
     commitEntry,
     openAndReveal,
@@ -187,8 +189,9 @@ function PhaseGuide(props: {
         : "Bosphor returned the Walrus storage proof. Stellar/Soroban proof and settlement remain separate.";
     timerLabel = storageReceipt.status === "pending" ? "Intent" : "Blob";
     timerValue = shortAddr(storageReceipt.walrusBlobId || storageReceipt.intentId || storageReceipt.evmTxHash, 6);
-    ctaLabel = storageReceipt.status === "pending" ? "Intent pending" : "Storage ready";
-    ctaDisabled = true;
+    ctaLabel = storageReceipt.status === "pending" ? "Check Bosphor proof" : "Storage ready";
+    cta = checkStorageProof;
+    ctaDisabled = storageReceipt.status !== "pending" || working;
   } else if (!address && walletRoute === "bosphor-walrus" && evm.connected) {
     tone = "ready";
     eyebrow = "Storage route";
@@ -677,6 +680,7 @@ function LivePanel({
     storageReceipt,
     connect,
     createRound,
+    checkStorageProof,
     joinRound,
     commitEntry,
     openAndReveal,
@@ -823,6 +827,7 @@ function LivePanel({
         onEntryChange={setEntryValue}
         connect={() => void connect()}
         createRound={(duration) => void createRound(duration)}
+        checkStorageProof={() => void checkStorageProof()}
         joinRound={(id) => void joinRound(id)}
         suggestedRoundId={DEFAULT_ROUND_ID}
         commitEntry={() => void commitEntry()}

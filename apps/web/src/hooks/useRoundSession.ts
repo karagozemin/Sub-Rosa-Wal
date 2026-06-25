@@ -35,7 +35,7 @@ import {
 import { DEMO_TRACE } from "../demo/trace";
 import { formatCountdown, useDrandCountdown } from "./useDrandCountdown";
 import { useToast } from "../ui/Toast";
-import { submitBosphorIntent } from "../lib/bosphorIntent";
+import { fetchBosphorIntentExecution, submitBosphorIntent } from "../lib/bosphorIntent";
 import type { StorageReceipt } from "../lib/storageTypes";
 import {
   createCommitmentHash,
@@ -412,6 +412,46 @@ export function useRoundSession(
     }
   }
 
+  async function checkStorageProof() {
+    if (activeRoute !== "bosphor-walrus" || !storageReceipt) return;
+    if (storageReceipt.storageProvider !== "bosphor-walrus") return;
+    if (!evm?.publicClient) {
+      toast.push("error", "Connect EVM wallet", "RainbowKit is needed to check the Bosphor deployment chain.");
+      return;
+    }
+    if (storageReceipt.status === "executed") {
+      toast.push("success", "Walrus proof already ready", storageReceipt.walrusBlobId);
+      return;
+    }
+    const id = active.id;
+    const workingId = toast.push("working", "Checking Bosphor proof…", storageReceipt.intentId || storageReceipt.evmTxHash);
+    setStatus("working");
+    try {
+      const nextReceipt = await fetchBosphorIntentExecution({
+        publicClient: evm.publicClient,
+        receipt: { ...storageReceipt, storageProvider: "bosphor-walrus" },
+      });
+      updateSession(id, { storageReceipt: nextReceipt });
+      setStatus("ok");
+      toast.dismiss(workingId);
+      if (nextReceipt.status === "executed") {
+        const msg = `Walrus proof ready · ${nextReceipt.walrusBlobId.slice(0, 10)}…`;
+        push(msg, id);
+        toast.push("success", "Walrus proof ready", msg);
+      } else {
+        const msg = "IntentExecuted has not appeared yet. Bosphor accepted the intent, but Walrus proof is still pending.";
+        push(msg, id);
+        toast.push("info", "Still pending", msg);
+      }
+    } catch (error) {
+      const msg = displayError(error);
+      setStatus("error");
+      push(msg, id);
+      toast.dismiss(workingId);
+      toast.push("error", "Proof check failed", msg);
+    }
+  }
+
   async function joinRound(idStr: string) {
     if (!contract || !address) {
       toast.push("error", "Wallet not ready", "Connect Freighter first");
@@ -649,6 +689,7 @@ export function useRoundSession(
     storageReceipt,
     connect,
     createRound,
+    checkStorageProof,
     joinRound,
     commitEntry,
     openAndReveal,
