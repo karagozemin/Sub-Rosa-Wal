@@ -2,8 +2,9 @@
   <img src="./assets/sub-rosa-readme.png" width="250" alt="Sub Rosa logo" />
 </p>
 
-# Sub Rosa Walrus Storage Layer
+# Sub Rosa [Walrus Storage Layer]
 
+**1st Place — Hack Privacy Track, Build On Stellar Hackathon — IBW 2026**
 **Encrypted Walrus storage for Sub Rosa sealed submissions.**
 
 This repo extends Sub Rosa with a real Walrus-backed storage layer for sealed
