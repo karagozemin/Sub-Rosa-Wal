@@ -181,15 +181,15 @@ function PhaseGuide(props: {
 
   if (walletRoute === "bosphor-walrus" && storageReceipt) {
     tone = "complete";
-    eyebrow = storageReceipt.status === "submitted" ? "Bosphor intent submitted" : "Walrus receipt ready";
-    title = storageReceipt.status === "submitted" ? "Storage intent submitted" : "Encrypted metadata stored";
+    eyebrow = storageReceipt.status === "submitted" ? "Bosphor intent accepted" : "Walrus receipt ready";
+    title = storageReceipt.status === "submitted" ? "Storage intent accepted" : "Encrypted metadata stored";
     detail =
       storageReceipt.status === "submitted"
-        ? "The EVM transaction is confirmed. Walrus proof can be checked separately when Bosphor emits IntentExecuted."
+        ? "The EVM transaction is confirmed and the real Bosphor intent id is recorded. Final Walrus proof can be refreshed when the executor emits IntentExecuted."
         : "Bosphor returned the Walrus storage proof. Stellar/Soroban proof and settlement remain separate.";
-    timerLabel = storageReceipt.status === "submitted" ? "Tx" : "Blob";
+    timerLabel = storageReceipt.status === "submitted" ? "Intent" : "Blob";
     timerValue = shortAddr(storageReceipt.walrusBlobId || storageReceipt.intentId || storageReceipt.evmTxHash, 6);
-    ctaLabel = storageReceipt.status === "submitted" ? "Check Walrus proof" : "Storage ready";
+    ctaLabel = storageReceipt.status === "submitted" ? "Refresh final proof" : "Storage ready";
     cta = checkStorageProof;
     ctaDisabled = storageReceipt.status !== "submitted" || working;
   } else if (!address && walletRoute === "bosphor-walrus" && evm.connected) {
@@ -563,12 +563,14 @@ function FeedbackPanel({
   roundId,
   commitValue,
   storageReceipt,
+  walletRoute,
 }: {
   status: ActionStatus;
   latest: string | null;
   roundId: bigint | null;
   commitValue: bigint | null;
   storageReceipt: StorageReceipt | null;
+  walletRoute: ActiveWalletRoute;
 }) {
   const headline =
     status === "working"
@@ -579,10 +581,21 @@ function FeedbackPanel({
           ? "Check wallet / retry"
           : "Ready";
 
-  const escrowLabel = commitValue == null ? "—" : formatDemoAmount(commitValue);
+  const roundLabel =
+    roundId == null && walletRoute === "bosphor-walrus" && storageReceipt
+      ? "EVM route"
+      : roundId == null
+        ? "—"
+        : `#${roundId}`;
+  const escrowLabel =
+    commitValue == null && walletRoute === "bosphor-walrus" && storageReceipt
+      ? "Stellar separate"
+      : commitValue == null
+        ? "—"
+        : formatDemoAmount(commitValue);
   const storageLabel =
     storageReceipt?.status === "submitted"
-      ? "Bosphor intent"
+      ? "Bosphor accepted"
       : storageReceipt
         ? "Bosphor → Walrus"
         : "—";
@@ -624,7 +637,7 @@ function FeedbackPanel({
       <div className="receipt-grid">
         <div>
           <small>round</small>
-          <b>{roundId == null ? "—" : `#${roundId}`}</b>
+          <b>{roundLabel}</b>
         </div>
         <div>
           <small>sealed escrow</small>
@@ -870,6 +883,7 @@ function LivePanel({
           roundId={roundId}
           commitValue={commitValue}
           storageReceipt={storageReceipt}
+          walletRoute={walletRoute}
         />
       </div>
 

@@ -346,14 +346,14 @@ export function useRoundSession(
             : `Bosphor → Walrus receipt created · ${receiptRef.slice(0, 10)}…`;
         push(
           storageReceipt.status === "submitted"
-            ? "EVM route submitted a real Bosphor storage intent. Walrus proof is optional follow-up and has not appeared yet."
+            ? `Bosphor accepted the encrypted storage intent · ${storageReceipt.intentId.slice(0, 10)}…`
             : "EVM route stored encrypted metadata. Stellar proof/settlement is not signed by MetaMask.",
           id,
         );
         toast.dismiss(workingId);
         toast.push(
           "success",
-          storageReceipt.status === "submitted" ? "Bosphor intent submitted" : "Walrus storage ready",
+          storageReceipt.status === "submitted" ? "Bosphor intent accepted" : "Walrus storage ready",
           msg,
         );
         return;
@@ -440,10 +440,9 @@ export function useRoundSession(
         toast.push("success", "Walrus proof ready", msg);
       } else {
         const msg = nextReceipt.intentId
-          ? "IntentExecuted has not appeared yet. Bosphor accepted the intent, but Walrus proof is still pending."
-          : "The Bosphor transaction is confirmed, but this receipt did not expose an IntentExecuted proof or intent id yet.";
-        push(msg, id);
-        toast.push("info", "Proof not ready", msg);
+          ? "Bosphor accepted the intent. Final Walrus proof has not returned from the Sui/LayerZero executor yet."
+          : "The Bosphor transaction is confirmed, but this receipt did not expose an intent id.";
+        toast.push("info", "Intent still accepted", msg);
       }
     } catch (error) {
       const msg = displayError(error);
