@@ -398,6 +398,25 @@
   font-size: 0.74rem;
 }
 
+.round-copy {
+  justify-self: end;
+  margin-top: 8px;
+  border: 1px solid rgba(91, 108, 255, 0.42);
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(91, 108, 255, 0.12);
+  cursor: pointer;
+}
+
+.round-copy:hover {
+  border-color: rgba(91, 108, 255, 0.72);
+}
+
 /* Wallet bar */
 .wallet-bar {
   display: grid;

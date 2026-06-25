@@ -152,6 +152,7 @@ function PhaseGuide(props: {
   } = props;
   const [joinId, setJoinId] = useState("");
   const [duration, setDuration] = useState<number>(DEFAULT_COMMIT_DURATION_SECONDS);
+  const isEvmRoute = walletRoute === "bosphor-walrus";
 
   function formatDurationLabel(seconds: number): string {
     if (seconds < 60) return `${seconds}s`;
@@ -207,7 +208,7 @@ function PhaseGuide(props: {
     timerValue = evm.wrongChain ? "wrong chain" : BOSPHOR_CHAIN.name;
     ctaLabel = evm.wrongChain ? "Switch EVM chain" : `Store via Bosphor · ${formatDurationLabel(duration)}`;
     cta = evm.wrongChain ? evm.switchToBosphorChain : () => createRound(duration);
-    showJoin = false;
+    showJoin = true;
     if (!storageConfigured) {
       tone = "danger";
       eyebrow = "Storage setup";
@@ -243,7 +244,7 @@ function PhaseGuide(props: {
         ? `Store via Bosphor · ${formatDurationLabel(duration)}`
         : `Create · ${formatDurationLabel(duration)}`;
     cta = () => createRound(duration);
-    showJoin = walletRoute === "stellar-walrus";
+    showJoin = true;
     if (!storageConfigured) {
       tone = "danger";
       eyebrow = "Storage setup";
@@ -511,20 +512,29 @@ function PhaseGuide(props: {
             </div>
             <label htmlFor="join-round-id">Join an existing round</label>
             <p className="join-form-helper">
-              Have a round id from a teammate? Drop it here to commit alongside the existing
-              bidders without creating a fresh round.
+              {isEvmRoute
+                ? "Paste a teammate's Bosphor round intent id to submit your sealed score into the same Walrus-backed round."
+                : "Have a round id from a teammate? Drop it here to commit alongside the existing bidders without creating a fresh round."}
             </p>
             <div className="join-form-row">
               <div className="join-input">
-                <span className="join-input-prefix">#</span>
+                <span className="join-input-prefix">{isEvmRoute ? "id" : "#"}</span>
                 <input
                   id="join-round-id"
                   type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder={suggestedRoundId != null ? String(suggestedRoundId) : "round id"}
+                  inputMode={isEvmRoute ? "text" : "numeric"}
+                  pattern={isEvmRoute ? "0x[0-9a-fA-F]{64}" : "[0-9]*"}
+                  placeholder={
+                    isEvmRoute
+                      ? "0x... intent id"
+                      : suggestedRoundId != null
+                        ? String(suggestedRoundId)
+                        : "round id"
+                  }
                   value={joinId}
-                  onChange={(e) => setJoinId(e.target.value.replace(/[^0-9]/g, ""))}
+                  onChange={(e) =>
+                    setJoinId(isEvmRoute ? e.target.value.trim() : e.target.value.replace(/[^0-9]/g, ""))
+                  }
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && joinId.trim() && !working) {
                       joinRound(joinId);
@@ -709,6 +719,8 @@ function LivePanel({
     log,
     revealProgress,
     storageReceipt,
+    entryStorageReceipt,
+    revealStorageReceipt,
     connect,
     createRound,
     joinRound,
@@ -752,6 +764,29 @@ function LivePanel({
   const accountLabel = activeAccount ? shortAddr(activeAccount, 6) : null;
   const routeLabel = walletRoute === "stellar-walrus" ? "Freighter + Walrus" : "RainbowKit + Bosphor → Walrus";
   const storageConfig = getStorageConfigStatus(walletRoute);
+  const activeStorageReceipt = revealStorageReceipt ?? entryStorageReceipt ?? storageReceipt;
+  const evmRoundId = walletRoute === "bosphor-walrus" ? storageReceipt?.intentId || null : null;
+  const heroRoundLabel =
+    walletRoute === "bosphor-walrus"
+      ? evmRoundId
+        ? shortAddr(evmRoundId, 6)
+        : "—"
+      : roundId == null
+        ? "—"
+        : `#${roundId}`;
+  const heroRoundDetail =
+    walletRoute === "bosphor-walrus"
+      ? evmRoundId
+        ? "Bosphor round id"
+        : "create or join intent"
+      : CONTRACT_ID
+        ? shortAddr(CONTRACT_ID, 6)
+        : "set VITE_CONTRACT_ID";
+
+  async function copyEvmRoundId() {
+    if (!evmRoundId) return;
+    await navigator.clipboard.writeText(evmRoundId);
+  }
 
   return (
     <>
@@ -763,8 +798,13 @@ function LivePanel({
         </div>
         <div className="round-box">
           <span>round</span>
-          <strong>{roundId == null ? "—" : `#${roundId}`}</strong>
-          <small>{CONTRACT_ID ? shortAddr(CONTRACT_ID, 6) : "set VITE_CONTRACT_ID"}</small>
+          <strong>{heroRoundLabel}</strong>
+          <small>{heroRoundDetail}</small>
+          {evmRoundId ? (
+            <button type="button" className="round-copy" onClick={() => void copyEvmRoundId()}>
+              Copy round id
+            </button>
+          ) : null}
         </div>
       </section>
 
@@ -886,7 +926,7 @@ function LivePanel({
       ) : null}
 
       <div className="proof-layout">
-        {roundId == null ? (
+        {roundId == null && !(walletRoute === "bosphor-walrus" && storageReceipt) ? (
           <ComparisonMini useCase={active} committed={committed} />
         ) : (
           <CohortPanel
@@ -896,7 +936,7 @@ function LivePanel({
             userCommitted={committed}
             userValue={commitValue == null ? null : entryValue}
             realPeers={realPeers}
-            roundId={roundId}
+            roundId={roundId ?? 0n}
           />
         )}
         <FeedbackPanel
@@ -904,7 +944,7 @@ function LivePanel({
           latest={log[0] ?? null}
           roundId={roundId}
           commitValue={commitValue}
-          storageReceipt={storageReceipt}
+          storageReceipt={activeStorageReceipt}
           walletRoute={walletRoute}
         />
       </div>

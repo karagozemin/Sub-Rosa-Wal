@@ -15,6 +15,7 @@ import type { StorageReceipt } from "./storageTypes";
 
 const BOSPHOR_ABI = parseAbi([
   "function quote(uint32 dstEid, bytes payload, uint256 deadline, bytes options) view returns (uint256 nativeFee, uint256 lzTokenFee)",
+  "function intents(bytes32 intentId) view returns (bool)",
   "function submitIntent(uint32 dstEid, bytes payload, uint256 deadline, bytes options) payable returns (bytes32 intentId)",
   "event IntentSubmitted(bytes32 indexed intentId, address indexed sender, uint64 targetChainId, bytes payload, uint256 nonce, uint256 deadline)",
   "event IntentExecuted(bytes32 indexed intentId, bytes proof)",
@@ -160,6 +161,24 @@ export async function fetchBosphorIntentExecution({
   });
   const executedProof = logs.at(-1)?.args.proof;
   return executedProof ? withExecutedProof(receipt, { intentId, proof: executedProof }) : receipt;
+}
+
+export async function hasBosphorIntent({
+  publicClient,
+  intentId,
+}: {
+  publicClient: PublicClient;
+  intentId: Hex;
+}): Promise<boolean> {
+  const adapter = requireHex(import.meta.env.VITE_BOSPHOR_ADAPTER_ADDRESS, "VITE_BOSPHOR_ADAPTER_ADDRESS");
+  return Boolean(
+    await publicClient.readContract({
+      address: adapter,
+      abi: BOSPHOR_ABI,
+      functionName: "intents",
+      args: [intentId],
+    }),
+  );
 }
 
 export async function submitBosphorIntent({

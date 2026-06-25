@@ -35,7 +35,7 @@ import {
 import { DEMO_TRACE } from "../demo/trace";
 import { formatCountdown, useDrandCountdown } from "./useDrandCountdown";
 import { useToast } from "../ui/Toast";
-import { submitBosphorIntent } from "../lib/bosphorIntent";
+import { hasBosphorIntent, submitBosphorIntent } from "../lib/bosphorIntent";
 import type { StorageReceipt } from "../lib/storageTypes";
 import {
   createCommitmentHash,
@@ -71,6 +71,8 @@ export interface CaseSession {
   live: LiveRound | null;
   log: string[];
   storageReceipt: StorageReceipt | null;
+  entryStorageReceipt: StorageReceipt | null;
+  revealStorageReceipt: StorageReceipt | null;
   evmRevealed: boolean;
 }
 
@@ -84,6 +86,8 @@ function emptySession(roundId: bigint | null = null): CaseSession {
     live: null,
     log: [],
     storageReceipt: null,
+    entryStorageReceipt: null,
+    revealStorageReceipt: null,
     evmRevealed: false,
   };
 }
@@ -132,7 +136,19 @@ export function useRoundSession(
   );
   const contract = useWalletContract(address);
   const session = sessions[active.id];
-  const { auditorPublicKey, commitValue, sealedCiphertext, live, log, roundId, roundCreatedAt, storageReceipt, evmRevealed } =
+  const {
+    auditorPublicKey,
+    commitValue,
+    sealedCiphertext,
+    live,
+    log,
+    roundId,
+    roundCreatedAt,
+    storageReceipt,
+    entryStorageReceipt,
+    revealStorageReceipt,
+    evmRevealed,
+  } =
     session;
   const canUseContract = Boolean(CONTRACT_ID && contract);
   const targetRound = live ? Number(live.round.reveal_round) : DEMO_TRACE.meta.revealRound;
@@ -342,6 +358,9 @@ export function useRoundSession(
           sealedCiphertext: null,
           live: null,
           storageReceipt,
+          entryStorageReceipt: null,
+          revealStorageReceipt: null,
+          evmRevealed: false,
         });
         setStatus("ok");
         const msg =
@@ -417,6 +436,65 @@ export function useRoundSession(
   }
 
   async function joinRound(idStr: string) {
+    if (activeRoute === "bosphor-walrus") {
+      if (!evm?.connected || !evm.address || !evm.publicClient) {
+        toast.push("error", "Connect EVM wallet", "RainbowKit checks the Bosphor round intent.");
+        return;
+      }
+      if (evm.wrongChain) {
+        toast.push("error", "Wrong EVM chain", "Switch to the configured Bosphor deployment chain.");
+        return;
+      }
+      const id = active.id;
+      const intentId = idStr.trim() as Hex;
+      if (!/^0x[0-9a-fA-F]{64}$/.test(intentId)) {
+        toast.push("error", "Invalid Bosphor round id", "Paste the 0x-prefixed Bosphor intent id.");
+        return;
+      }
+      const workingId = toast.push("working", "Joining Bosphor round…", shortAddr(intentId));
+      setStatus("working");
+      try {
+        const exists = await hasBosphorIntent({
+          publicClient: evm.publicClient,
+          intentId,
+        });
+        if (!exists) throw new Error("Bosphor adapter does not have this intent id.");
+        const storageReceipt: StorageReceipt = {
+          storageProvider: "bosphor-walrus",
+          status: "submitted",
+          intentId,
+          evmTxHash: "",
+          walrusBlobId: "",
+          endEpoch: "",
+          payloadHash: "",
+          timestamp: new Date().toISOString(),
+        };
+        updateSession(id, {
+          roundId: null,
+          auditorPublicKey: null,
+          roundCreatedAt: Date.now(),
+          commitValue: null,
+          sealedCiphertext: null,
+          live: null,
+          storageReceipt,
+          entryStorageReceipt: null,
+          revealStorageReceipt: null,
+          evmRevealed: false,
+        });
+        setStatus("ok");
+        const msg = `Joined Bosphor round · ${shortAddr(intentId, 6)}`;
+        push(msg, id);
+        toast.dismiss(workingId);
+        toast.push("success", "Joined Bosphor round", msg);
+      } catch (error) {
+        const msg = displayError(error);
+        setStatus("error");
+        push(msg, id);
+        toast.dismiss(workingId);
+        toast.push("error", "Could not join Bosphor round", msg);
+      }
+      return;
+    }
     if (!contract || !address) {
       toast.push("error", "Wallet not ready", "Connect Freighter first");
       return;
@@ -526,7 +604,7 @@ export function useRoundSession(
         });
         updateSession(id, {
           commitValue: value,
-          storageReceipt: receipt,
+          entryStorageReceipt: receipt,
           evmRevealed: false,
         });
         setStatus("ok");
@@ -641,7 +719,7 @@ export function useRoundSession(
           },
         });
         updateSession(id, {
-          storageReceipt: receipt,
+          revealStorageReceipt: receipt,
           evmRevealed: true,
         });
         setStatus("ok");
@@ -788,6 +866,8 @@ export function useRoundSession(
     log,
     revealProgress,
     storageReceipt,
+    entryStorageReceipt,
+    revealStorageReceipt,
     connect,
     createRound,
     joinRound,
