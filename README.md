@@ -53,30 +53,17 @@ pretending a storage proof exists.
 
 ---
 
-## Underlying Sub Rosa proofs
-
-| Layer | Command | Network | What it proves |
-| --- | --- | --- | --- |
-| **Full product** | `pnpm lifecycle:e2e` | Testnet | 2 bidders, USDC SAC, keeper settle → contract **0** |
-| **Multi-agent** | `pnpm agents:e2e` | Testnet | Mandate + x402 + keeper reveal + settle → **single UI trace** |
-| **x402 appraisal** | `pnpm appraisal:e2e` | Testnet | HTTP 402 → on-chain USDC settle |
-| **Mainnet smoke** | `pnpm mainnet:deploy` + `pnpm mainnet:settle` | Mainnet | Deploy, BLS, settle on **real XLM** |
-| **Mainnet verify** | `pnpm mainnet:verify` | Mainnet | Read-only check of settled round 1 |
-
-See [docs/LIMITATIONS.md](./docs/LIMITATIONS.md) for honest scope (mainnet ≠ full USDC product).
-
----
-
-## Where this plugs in
+## Why Walrus
 
 Sub Rosa can sit under allocation, judging, scoring, sealed-bid, appraisal, or
-evidence-heavy workflows. This Walrus layer gives those workflows a place to
-put encrypted payloads that are too large or too sensitive for contract state,
-without moving fairness or settlement away from Sub Rosa.
+evidence-heavy workflows. Those workflows need two things at once: compact
+on-chain proof and private heavy data. The usual "fix" puts payloads in a
+centralized database and asks users to trust the operator.
 
-The original hackathon-winning Sub Rosa protocol proof is still present in this
-monorepo: Soroban contracts, TypeScript SDK, keeper service, tlock encryption,
-x402 appraisal proof, and mainnet/testnet proof commands.
+This repo replaces that storage assumption with encrypted Walrus payloads while
+leaving fairness, reveal, escrow, clearing, and settlement on Stellar/Soroban.
+Walrus holds the heavy encrypted payloads; Sub Rosa keeps the sealed round state
+machine and proof references.
 
 ---
 
@@ -146,31 +133,11 @@ pnpm mainnet:micro           # dry-run checklist; --execute needs MAINNET_CONFIR
 
 ---
 
-## The idea
-
-Public ledgers are transparent by default, but sealed coordination needs two
-things at once: compact on-chain proof and private heavy data. The usual "fix"
-puts payloads in a centralized database and asks users to trust the operator.
-This repo replaces that storage assumption with encrypted Walrus payloads while
-leaving Sub Rosa's settlement and reveal logic on Stellar/Soroban:
-
-- **Seal** each bid with Drand timelock encryption (`tlock`) to a future round R.
-- **Force-open** at R: BLS12-381 verified **on-chain** — simultaneous reveal.
-- **Settle** deterministically. Identities disclosed only to the auditor.
-
-See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for the system map, lifecycle, trust boundaries, and monorepo layout.
-
-## Bosphor / Walrus storage layer
-
-Sub Rosa now has a real Walrus-backed storage layer for sealed round metadata,
-judge notes, scoring JSON, appraisal reports, evidence files, and other heavy
-payloads that do not belong in Soroban state. The core rule is unchanged:
-**Stellar/Soroban remains the fairness, reveal, escrow, clearing, and settlement
-layer. Walrus is encrypted storage.**
+## Architecture / route table
 
 The live app uses one active wallet route at a time:
 
-| Route | Wallet | What the wallet signs | Shareable round identifier | Settlement layer |
+| Route | Wallet | What the wallet signs | Shareable identifier | Settlement layer |
 | --- | --- | --- | --- | --- |
 | **Stellar route** | Freighter | Soroban `create_round`, `attach_storage_ref`, commit, reveal, clear, settle | Numeric Soroban `round_id` | Stellar/Soroban |
 | **EVM route** | RainbowKit / MetaMask | Bosphor `submitIntent` calls for round metadata, sealed entry, and reveal metadata | Bosphor `intentId` for the round metadata intent | Storage-only demo route; Stellar settlement remains separate |
@@ -179,7 +146,9 @@ No runtime mock storage is used. The app does not treat `localStorage` as
 Walrus and does not generate fake Bosphor intent IDs, fake Walrus blob IDs, or
 fake Stellar tx IDs. Missing storage configuration blocks the action.
 
-### Current live behavior
+See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for the system map, lifecycle, trust boundaries, and monorepo layout.
+
+## Bosphor-Walrus behavior
 
 ```text
 Freighter route
@@ -193,8 +162,7 @@ EVM route
   Browser encrypts round metadata
       -> MetaMask signs Bosphor submitIntent
       -> Bosphor emits IntentSubmitted(intentId)
-      -> intentId becomes the shareable Bosphor round id
-      -> participants can join by intentId
+      -> intentId becomes the shareable storage-route identifier
       -> sealed score and reveal metadata are submitted as further Bosphor intents
 ```
 
@@ -217,6 +185,34 @@ A deployed Stellar contract must include `attach_storage_ref` and
 `get_storage_ref`; older testnet contract IDs that only expose `create_round`
 cannot bind the Walrus receipt on-chain.
 
+---
+
+## Underlying Sub Rosa proofs
+
+The original hackathon-winning Sub Rosa protocol proof is still present in this
+monorepo: Soroban contracts, TypeScript SDK, keeper service, tlock encryption,
+x402 appraisal proof, and mainnet/testnet proof commands.
+
+| Layer | Command | Network | What it proves |
+| --- | --- | --- | --- |
+| **Full product** | `pnpm lifecycle:e2e` | Testnet | 2 bidders, USDC SAC, keeper settle → contract **0** |
+| **Multi-agent** | `pnpm agents:e2e` | Testnet | Mandate + x402 + keeper reveal + settle → **single UI trace** |
+| **x402 appraisal** | `pnpm appraisal:e2e` | Testnet | HTTP 402 → on-chain USDC settle |
+| **Mainnet smoke** | `pnpm mainnet:deploy` + `pnpm mainnet:settle` | Mainnet | Deploy, BLS, settle on **real XLM** |
+| **Mainnet verify** | `pnpm mainnet:verify` | Mainnet | Read-only check of settled round 1 |
+
+See [docs/LIMITATIONS.md](./docs/LIMITATIONS.md) for honest scope (mainnet ≠ full USDC product).
+
+---
+
+## Core protocol idea
+
+Sub Rosa's underlying fairness primitive is unchanged:
+
+- **Seal** each bid with Drand timelock encryption (`tlock`) to a future round R.
+- **Force-open** at R: BLS12-381 verified **on-chain** — simultaneous reveal.
+- **Settle** deterministically. Identities disclosed only to the auditor.
+
 ## Monorepo layout
 
 ```
@@ -235,7 +231,7 @@ docs/                   Design, threat model, track answers, deploy, limitations
 ```bash
 pnpm install
 pnpm contract:test          # Rust contract tests
-pnpm web:dev                # jury UI — works without .env
+pnpm web:dev                # UI opens without .env; real Walrus/Bosphor/Soroban actions require env configuration
 pnpm agents:e2e             # testnet full agent proof (needs stellar keys)
 pnpm mainnet:verify         # mainnet read-only proof
 ```
