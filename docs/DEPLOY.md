@@ -64,10 +64,9 @@ Important: Vite only exposes vars prefixed with `VITE_`. They are **public** in 
 
 ## 3. Live Walrus-backed round flow
 
-The live create-round flow stores encrypted metadata on Walrus before the
-normal Sub Rosa/Soroban action continues. This path needs real public
-configuration. Missing storage vars block creation instead of producing fake
-blob ids.
+The live create-round flow stores encrypted metadata on Walrus before the next
+route-specific action continues. This path needs real public configuration.
+Missing storage vars block creation instead of producing fake blob ids.
 
 For the **Stellar route** (Freighter + direct Walrus publisher):
 
@@ -97,6 +96,11 @@ VITE_EVM_RPC_URL=https://...
 
 If `VITE_EVM_RPC_URL` is omitted, wagmi/RainbowKit uses the connected wallet
 provider and configured chain. Do not use this optional RPC value as a secret.
+
+The EVM route uses the first Bosphor `IntentSubmitted(intentId)` as the
+shareable Bosphor round id. Later sealed score and reveal metadata submissions
+are additional Bosphor storage intents linked back to that id. This route does
+not sign Soroban settlement transactions.
 
 The configured Soroban contract must expose `attach_storage_ref` and
 `get_storage_ref`. Older testnet contracts that only expose the base

@@ -10,29 +10,35 @@ Sub Rosa is a **sealed commit–reveal coordination primitive** on Stellar Sorob
 
 The Walrus layer does not replace Stellar. Before important round/submission
 actions, the app encrypts heavier metadata client-side and stores it through the
-configured Walrus route. Soroban receives only compact proof/reference fields.
+configured Walrus route. On the Stellar route, Soroban receives only compact
+proof/reference fields. On the EVM route, Bosphor records storage intents and
+the Stellar settlement path remains separate.
 
 ## Architecture
 
+```text
+                         apps/web
+             client encryption + active route selection
+                              │
+        ┌─────────────────────┴─────────────────────┐
+        │                                           │
+        ▼                                           ▼
+ Freighter / Stellar route                  RainbowKit / EVM route
+        │                                           │
+        ▼                                           ▼
+ Walrus publisher                           BosphorAdapter
+ blobId + endEpoch                          IntentSubmitted(intentId)
+        │                                           │
+        ▼                                           ▼
+ Round contract                             Bosphor round id
+ create_round                               join by intentId
+ attach_storage_ref                         commit/reveal metadata intents
+ commit / reveal / settle                   storage-only route
 ```
-┌─────────────┐     encrypt metadata     ┌──────────────────┐
-│ Operator /  │ ───────────────────────► │ Walrus storage   │
-│ App         │     store, receipt       │ route            │
-└──────┬──────┘                          └────────┬─────────┘
-       │ create_round + attach_storage_ref         │ blobId / intentId
-       ▼                                           │
-┌─────────────┐     sealBid (tlock)      ┌────────▼─────────┐
-│ Bidder /    │ ───────────────────────► │ Round contract   │
-│ Agent       │     commit(H,C,blob)     │ (Soroban)        │
-└─────────────┘                          └────────┬─────────┘
-       │ x402 appraisal                           │
-       ▼                                          │ open_reveal(BLS sig)
-┌─────────────┐                          ┌────────▼─────────┐
-│ Appraisal   │                          │ Keeper (anyone)  │
-│ API         │                          │ reveal -> clear  │
-└─────────────┘                          │ -> settle        │
-                                           └──────────────────┘
-```
+
+The left route is the full Stellar/Soroban Sub Rosa lifecycle. The right route
+is the EVM-to-Walrus storage route and deliberately does not claim MetaMask can
+sign Soroban settlement transactions.
 
 ### Packages
 
@@ -68,8 +74,9 @@ configured Walrus route. Soroban receives only compact proof/reference fields.
 - The app computes `commitment_hash` from the content hash plus route metadata.
 - The encrypted payload is stored through one configured route:
   - **Stellar route:** direct Walrus publisher, with Freighter signing Soroban.
-  - **EVM route:** RainbowKit/wagmi signs a Bosphor storage intent, then Soroban
-    still needs a Stellar signer for proof recording.
+  - **EVM route:** RainbowKit/wagmi signs Bosphor storage intents. The first
+    `IntentSubmitted(intentId)` becomes the shareable Bosphor round id; sealed
+    score and reveal metadata intents link back to that id.
 - The app must not generate fake blob ids, fake intent ids, or use localStorage
   as a Walrus substitute.
 
@@ -108,6 +115,26 @@ round to that external storage object.
 
 Older deployed contracts that do not expose `attach_storage_ref` can still run
 the base Sub Rosa lifecycle, but they cannot bind a Walrus receipt on-chain.
+
+### Bosphor receipt record
+
+For the EVM route the accepted storage record is:
+
+```ts
+{
+  storageProvider: "bosphor-walrus";
+  status: "submitted" | "executed";
+  intentId: "0x...";       // shareable Bosphor round id for the first intent
+  evmTxHash: "0x...";
+  payloadHash: "0x...";
+  walrusBlobId: "";       // populated if/when IntentExecuted proof returns
+  endEpoch: "";           // populated if/when IntentExecuted proof returns
+}
+```
+
+`IntentExecuted` is the later Bosphor/Sui/LayerZero proof return path. The live
+UI continues after `IntentSubmitted` because that event is already real on-chain
+Bosphor adapter state.
 
 ## Settlement rails
 

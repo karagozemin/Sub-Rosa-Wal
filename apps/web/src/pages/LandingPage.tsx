@@ -184,6 +184,50 @@ export function LandingPage({
       </motion.section>
 
       <motion.section
+        className="landing-architecture"
+        initial={{ opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-80px" }}
+        transition={transition}
+      >
+        <div className="landing-architecture-head">
+          <span>Architecture</span>
+          <h2>Stellar stays the proof layer. Walrus carries the encrypted weight.</h2>
+          <p>
+            The app uses one active wallet route at a time. Freighter signs the Stellar
+            protocol path; RainbowKit signs Bosphor storage intents. The routes meet at encrypted
+            Walrus storage, but they never pretend to be the same wallet.
+          </p>
+        </div>
+
+        <div className="architecture-rail" aria-label="Sub Rosa Walrus architecture">
+          <article>
+            <span>Freighter route</span>
+            <strong>Stellar / Soroban</strong>
+            <p>Numeric round id, storage reference, commit, reveal, clear, settle.</p>
+          </article>
+          <div className="architecture-node">
+            <span>Encrypted payloads</span>
+            <strong>Walrus</strong>
+            <p>Round metadata, sealed scores, evidence, notes, appraisal JSON.</p>
+          </div>
+          <article>
+            <span>EVM route</span>
+            <strong>Bosphor → Walrus</strong>
+            <p>MetaMask signs storage intents; the Bosphor intentId is the shareable round id.</p>
+          </article>
+        </div>
+
+        <div className="architecture-flow">
+          <span>client encrypts</span>
+          <i />
+          <span>real storage receipt</span>
+          <i />
+          <span>proof/reference only on-chain</span>
+        </div>
+      </motion.section>
+
+      <motion.section
         className="pilot-banner"
         initial={{ opacity: 0, y: 16 }}
         whileInView={{ opacity: 1, y: 0 }}

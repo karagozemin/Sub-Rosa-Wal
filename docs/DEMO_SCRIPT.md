@@ -49,9 +49,14 @@ stores encrypted heavy metadata only.
 
 - **Freighter route:** Freighter is the active Stellar account. The app stores
   encrypted metadata on Walrus, then Freighter signs the normal Soroban action.
+  The shareable id is the numeric Soroban `round_id`.
 - **RainbowKit route:** RainbowKit is the active EVM account for the Bosphor
-  storage intent. It does not sign Soroban transactions.
+  storage route. MetaMask signs `submitIntent` for round metadata, sealed score,
+  and reveal metadata. The shareable id is the Bosphor `intentId` from the first
+  round metadata intent.
 - The user should see only one active route at a time.
+- The EVM route is a real Bosphor/Walrus storage route, not Stellar settlement.
+  It does not claim MetaMask can sign Soroban transactions.
 - No fake storage: if Walrus/Bosphor config is missing, the action is blocked
   with setup text.
 

@@ -82,10 +82,10 @@ Drand signature, reveal valid entries, clear the round, and settle escrow.
 
 ## Wallet routes
 
-| Route | Wallet | What it signs |
-| --- | --- | --- |
-| Stellar route | Freighter | Soroban `create_round`, `attach_storage_ref`, commit, reveal, settle |
-| EVM route | RainbowKit / wagmi | Bosphor storage intent only |
+| Route | Wallet | What it signs | Shareable id |
+| --- | --- | --- | --- |
+| Stellar route | Freighter | Soroban `create_round`, `attach_storage_ref`, commit, reveal, settle | Numeric Soroban `round_id` |
+| EVM route | RainbowKit / wagmi | Bosphor round metadata, sealed entry, and reveal metadata storage intents | Bosphor round `intentId` |
 
 Freighter cannot sign Bosphor EVM transactions. RainbowKit/EVM wallets cannot
 sign Soroban transactions. If an app offers both routes, keep them explicit so
@@ -93,7 +93,9 @@ the user understands which account is active.
 
 ## Walrus integration requirements
 
-- The app must receive a real Walrus blob id from the selected storage route.
+- The app must receive a real storage record from the selected route:
+  direct Walrus `blobId` for the Stellar route, or Bosphor `IntentSubmitted`
+  `intentId` for the EVM route.
 - The main app flow must not generate fake Walrus blob ids or fake Bosphor
   intent ids.
 - `localStorage` can cache recent receipts for UI convenience, but it must not

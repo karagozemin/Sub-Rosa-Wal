@@ -5,8 +5,14 @@ protocol. Walrus is an encrypted storage layer for heavy round and submission
 metadata: descriptions, evidence files, judge notes, appraisal reports, scoring
 JSON, and other payloads that should not live directly in contract state.
 
-This repo does not use mock storage in the main live flow. The app must receive
-a real Walrus blob id from the selected storage route before it continues.
+This repo does not use mock storage in the main live flow. The selected storage
+route must produce a real storage record before the UI continues:
+
+- Freighter route: a real Walrus publisher response with `blobId`.
+- EVM route: a real Bosphor `IntentSubmitted(intentId)` event.
+
+`IntentExecuted(intentId, proof)` is the later Bosphor/Sui/LayerZero proof
+return path. The UI does not block the EVM demo on that asynchronous event.
 
 ## Separation Of Duties
 
@@ -22,16 +28,16 @@ a real Walrus blob id from the selected storage route before it continues.
 The frontend keeps the original Sub Rosa flow and lets the user choose one
 active route at a time.
 
-| Route | Wallet | Storage path | Stellar behavior |
-| --- | --- | --- | --- |
-| Stellar route | Freighter | Direct Walrus publisher (`VITE_WALRUS_PUBLISHER_URL`) | Freighter signs `create_round`, `attach_storage_ref`, commit, reveal, settle |
-| EVM route | RainbowKit / wagmi | Bosphor adapter contract -> Walrus | EVM wallet signs only the Bosphor storage intent; it cannot sign Soroban transactions |
+| Route | Wallet | Storage path | Join identifier | Stellar behavior |
+| --- | --- | --- | --- | --- |
+| Stellar route | Freighter | Direct Walrus publisher (`VITE_WALRUS_PUBLISHER_URL`) | Numeric Soroban `round_id` | Freighter signs `create_round`, `attach_storage_ref`, commit, reveal, settle |
+| EVM route | RainbowKit / wagmi | Bosphor adapter contract -> Walrus | Bosphor round `intentId` | EVM wallet signs Bosphor storage intents only; it cannot sign Soroban transactions |
 
 Freighter cannot sign Bosphor EVM transactions. RainbowKit/EVM wallets cannot
 replace Stellar/Soroban signatures. The UI surfaces this explicitly instead of
 silently switching wallet responsibilities.
 
-## Create Round Storage Flow
+## Freighter / Stellar Route
 
 1. The user chooses a wallet route.
 2. The browser prepares the round metadata object.
@@ -42,7 +48,6 @@ silently switching wallet responsibilities.
 5. The encrypted payload is stored on Walrus through the selected route.
 6. The app receives a real storage receipt:
    - `storage_provider`
-   - `intent_id` when Bosphor is used
    - `blob_id`
    - `end_epoch`
 7. The normal Sub Rosa Soroban round is created.
@@ -63,6 +68,43 @@ attach_storage_ref(
 
 Soroban stores only the proof/reference fields. The encrypted payload remains
 on Walrus.
+
+## RainbowKit / EVM Route
+
+The EVM route exists for Bosphor-to-Walrus storage intents. It does not create a
+numeric Soroban round id and does not pretend MetaMask can sign Stellar
+transactions.
+
+1. The user connects an EVM wallet on the configured Bosphor deployment chain.
+2. The browser encrypts round metadata client-side.
+3. The app calls `quote(dstEid, payload, deadline, options)`.
+4. The user signs `submitIntent(dstEid, payload, deadline, options)` with
+   `msg.value = nativeFee`.
+5. The app reads `IntentSubmitted(intentId, ...)` from the confirmed tx receipt.
+6. That `intentId` becomes the shareable Bosphor round id.
+7. Other users can paste the same `intentId` to join; the app verifies it with
+   the adapter's `intents(intentId)` view.
+8. Sealed scores and reveal metadata are submitted as additional Bosphor
+   storage intents linked back to the round `intentId`.
+
+Receipt shape:
+
+```ts
+{
+  storageProvider: "bosphor-walrus";
+  status: "submitted" | "executed";
+  intentId: "0x...";
+  evmTxHash: "0x...";
+  walrusBlobId: "";       // present after IntentExecuted proof, if available
+  endEpoch: "";           // present after IntentExecuted proof, if available
+  payloadHash: "0x...";
+  timestamp: string;
+}
+```
+
+The accepted Bosphor intent is real on-chain state even before the final
+`IntentExecuted` proof returns. The later proof path decodes
+`abi.encode(bytes32 blobId, uint256 endEpoch)`.
 
 ## Required Contract Support
 
@@ -105,3 +147,4 @@ configured Bosphor deployment chain.
 - No localStorage storage backend.
 - No claim that Stellar directly calls Walrus or Bosphor.
 - No claim that EVM wallets replace Stellar/Soroban settlement logic.
+- No silent fallback from missing real configuration to mock data.

@@ -23,69 +23,101 @@ The operator does **not** need keys to open bids. After R, values are public; id
 
 ## System diagram
 
+Sub Rosa separates the **truth layer** from the **payload layer**:
+
+- Stellar/Soroban stores commitments, reveal gates, escrow, clearing, settlement,
+  and compact storage references.
+- Walrus stores encrypted heavy payloads.
+- Bosphor is the EVM route into Walrus; it is not a Stellar signer and it does
+  not settle Sub Rosa rounds.
+
+```text
+                         ┌─────────────────────────────────────────────┐
+                         │              apps/web                       │
+                         │ client-side encryption + route selection     │
+                         └───────────────┬─────────────────────────────┘
+                                         │
+                  ┌──────────────────────┴──────────────────────┐
+                  │                                             │
+                  ▼                                             ▼
+       ┌──────────────────────┐                      ┌──────────────────────┐
+       │ Freighter route       │                      │ EVM route             │
+       │ Stellar wallet active │                      │ RainbowKit active     │
+       └──────────┬───────────┘                      └──────────┬───────────┘
+                  │                                             │
+                  ▼                                             ▼
+       ┌──────────────────────┐                      ┌──────────────────────┐
+       │ Walrus publisher      │                      │ BosphorAdapter EVM    │
+       │ encrypted blob        │                      │ quote + submitIntent  │
+       │ blobId + endEpoch     │                      │ IntentSubmitted(id)   │
+       └──────────┬───────────┘                      └──────────┬───────────┘
+                  │                                             │
+                  ▼                                             ▼
+       ┌──────────────────────┐                      ┌──────────────────────┐
+       │ Stellar Soroban       │                      │ Walrus on Sui         │
+       │ create_round          │                      │ encrypted blobs       │
+       │ attach_storage_ref    │                      │ later proof return    │
+       │ commit/reveal/settle  │                      │ IntentExecuted proof  │
+       └──────────────────────┘                      └──────────────────────┘
+
+       Numeric Soroban round_id                       Bosphor intentId
+       is shareable for joining                       is shareable for joining
 ```
-                         ┌─────────────────────────────────────────┐
-                         │           Stellar Soroban               │
-                         │  ┌───────────────────────────────────┐  │
-  sealBid + commit ─────►│  │  contracts/round (Round WASM)     │  │
-  (session key)          │  │  · create_round / commit / reveal │  │
-                         │  │  · attach_storage_ref             │  │
-                         │  │  · open_reveal / clear / settle   │  │
-                         │  └───────────────────────────────────┘  │
-                         └─────────────────────────────────────────┘
-        ▲                              ▲
-        │ packages/tlock               │ packages/sdk (SubRosaClient)
-        │ sealBid / openBid            │ bindings + RPC (+ optional OZ submitter)
-        │                              │
-        │                              │ compact storage ref only
-        │                              │
- ┌──────┴──────┐   encrypted payload    ┌────────────────────────┐
- │ apps/web    │───────────────────────►│ Walrus storage          │
- │ encrypts    │ direct publisher or    │ blob id + end epoch     │
- │ metadata    │ Bosphor EVM intent     └────────────────────────┘
- └─────────────┘
- ┌──────┴──────┐                ┌──────┴──────┐
- │ services/   │   HTTP 402     │ services/   │
- │ agent       │───────────────►│ appraisal-  │
- │ mandate+caps│   x402 USDC    │ api         │
- └─────────────┘                └─────────────┘
-        │
-        │  services/keeper — permissionless keepRound / closeRound / watch
-        ▼
- ┌─────────────┐     embedded trace      ┌─────────────┐
- │ Drand       │                         │ apps/web    │
- │ quicknet    │                         │ jury demo   │
- └─────────────┘                         └─────────────┘
+
+The original Sub Rosa backend remains intact:
+
+```text
+packages/tlock      sealBid / openBid / Drand R binding
+packages/sdk        RoundContract bindings + SubRosaClient
+services/keeper     permissionless open_reveal / reveal / clear / settle
+services/agent      mandate/cap checks + x402 + commit flow
+services/appraisal  HTTP 402 appraisal rail
 ```
 
 ---
 
 ## Round lifecycle
 
+The Stellar route is the canonical Sub Rosa lifecycle: a Soroban round is
+created, participants commit, Drand opens the reveal gate, and settlement
+happens on Stellar. The EVM route is a real Bosphor/Walrus storage route for
+the same sealed metadata objects; it uses Bosphor intent ids as shareable demo
+round ids and does not pretend to perform Soroban settlement.
+
 ```mermaid
 sequenceDiagram
-  participant Op as Operator
+  participant Op as Operator / creator
   participant A as Agent / bidder
   participant C as Round contract
-  participant W as Walrus / Bosphor storage route
+  participant W as Walrus publisher
+  participant B as Bosphor adapter
   participant X as x402 appraisal API
   participant D as Drand quicknet
   participant K as Keeper
 
-  Op->>W: store encrypted round metadata
-  W-->>Op: blob id / intent id / end epoch
-  Op->>C: create_round(R, deadlines, auditor pubkey)
-  Op->>C: attach_storage_ref(content_hash, commitment_hash, blob_id)
-  A->>X: pay appraisal (x402, testnet USDC)
-  X-->>A: fair value + suggested bid
-  A->>C: commit(H, ciphertext, auditor blob, escrow)
-  Note over C: Status Open — sealed
-  D-->>K: publish round R + BLS sig
-  K->>C: open_reveal(sig) — BLS verified on-chain
-  K->>C: reveal(bidder, value) for each bidder
-  Note over C: Status Revealing
-  K->>C: clear() then settle()
-  Note over C: Status Settled — balance 0
+  alt Freighter / Stellar route
+    Op->>W: store encrypted round metadata
+    W-->>Op: blobId / endEpoch
+    Op->>C: create_round(R, deadlines, auditor pubkey)
+    Op->>C: attach_storage_ref(content_hash, commitment_hash, blob_id)
+    A->>X: pay appraisal (x402, testnet USDC)
+    X-->>A: fair value + suggested bid
+    A->>C: commit(H, ciphertext, auditor blob, escrow)
+    Note over C: Status Open — sealed
+    D-->>K: publish round R + BLS sig
+    K->>C: open_reveal(sig) — BLS verified on-chain
+    K->>C: reveal(bidder, value) for each bidder
+    Note over C: Status Revealing
+    K->>C: clear() then settle()
+    Note over C: Status Settled — balance 0
+  else RainbowKit / EVM route
+    Op->>B: submitIntent(encrypted round metadata)
+    B-->>Op: IntentSubmitted(intentId)
+    Note over Op,B: intentId is the shareable Bosphor round id
+    A->>B: submitIntent(encrypted sealed score)
+    A->>B: submitIntent(encrypted reveal metadata)
+    Note over Op,A: Storage-backed demo route only; Stellar settlement is separate
+  end
 ```
 
 ---
@@ -154,10 +186,17 @@ Stellar does not call Walrus or Bosphor directly.
 
 The live UI supports two explicit wallet routes:
 
-| Route | Wallet | Storage | Soroban |
-| --- | --- | --- | --- |
-| Stellar route | Freighter | Direct Walrus publisher | Freighter signs Sub Rosa transactions |
-| EVM route | RainbowKit / wagmi | Bosphor -> Walrus | EVM signs only storage intent; Soroban still needs Stellar signing |
+| Route | Wallet | Storage | Join id | Soroban behavior |
+| --- | --- | --- | --- | --- |
+| Stellar route | Freighter | Direct Walrus publisher | Numeric `round_id` | Freighter signs Sub Rosa round, storage reference, commit, reveal, settle |
+| EVM route | RainbowKit / wagmi | Bosphor -> Walrus | Bosphor `intentId` | EVM signs only storage intents; Stellar settlement remains a separate route |
+
+In the EVM route the app treats `IntentSubmitted(intentId)` as the accepted
+storage record. `IntentExecuted(intentId, proof)` is the later Bosphor/Sui
+proof-return event and is not required for the UI to continue through the
+storage-backed demo flow. Participants join by pasting the Bosphor round
+`intentId`; the app checks the adapter's `intents(intentId)` view before
+allowing a sealed score submission.
 
 See [docs/WALRUS_STORAGE.md](./docs/WALRUS_STORAGE.md) for the storage receipt
 shape, environment variables, and non-goals.

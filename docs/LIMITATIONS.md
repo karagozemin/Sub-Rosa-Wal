@@ -35,6 +35,8 @@ Mainnet does **not** replay 700 / 459 USDC demo amounts. Mainnet smoke uses **1 
   transactions.
 - RainbowKit/EVM wallets can sign Bosphor storage intents, but they cannot
   replace Stellar/Soroban proof, reveal, or settlement logic.
+- In the EVM route, the Bosphor round `intentId` is shareable for joining the
+  storage-backed demo flow. It is not a numeric Soroban `round_id`.
 - Older deployed Round contracts without `attach_storage_ref` can run the base
   Sub Rosa lifecycle, but cannot bind a Walrus receipt on-chain.
 

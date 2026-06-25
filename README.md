@@ -138,31 +138,58 @@ See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for the system map, lifecycle, trus
 
 ## Bosphor / Walrus storage layer
 
-The live UI keeps the original Sub Rosa flow and uses one active wallet route
-at a time:
+Sub Rosa now has a real Walrus-backed storage layer for sealed round metadata,
+judge notes, scoring JSON, appraisal reports, evidence files, and other heavy
+payloads that do not belong in Soroban state. The core rule is unchanged:
+**Stellar/Soroban remains the fairness, reveal, escrow, clearing, and settlement
+layer. Walrus is encrypted storage.**
 
-- **Freighter / Stellar wallet:** signs Soroban round creation, commit, reveal,
-  clearing, settlement, and the compact storage proof reference. Before the
-  Soroban action, encrypted metadata is stored through the configured Walrus
-  publisher (`VITE_WALRUS_PUBLISHER_URL`).
-- **RainbowKit / EVM wallet:** signs only the Bosphor storage intent that routes
-  encrypted Sub Rosa metadata to Walrus. It does not replace Stellar/Soroban
-  for round, reveal, or settlement logic.
+The live app uses one active wallet route at a time:
 
-The app does not treat localStorage as Walrus and does not generate fake
-Bosphor intent IDs or Walrus blob IDs. Before a new round is created, encrypted
-round metadata is stored on Walrus through the selected route. After the Stellar
-round exists, the operator attaches the returned storage proof to the round with:
+| Route | Wallet | What the wallet signs | Shareable round identifier | Settlement layer |
+| --- | --- | --- | --- | --- |
+| **Stellar route** | Freighter | Soroban `create_round`, `attach_storage_ref`, commit, reveal, clear, settle | Numeric Soroban `round_id` | Stellar/Soroban |
+| **EVM route** | RainbowKit / MetaMask | Bosphor `submitIntent` calls for round metadata, sealed entry, and reveal metadata | Bosphor `intentId` for the round metadata intent | Storage-only demo route; Stellar settlement remains separate |
+
+No runtime mock storage is used. The app does not treat `localStorage` as
+Walrus and does not generate fake Bosphor intent IDs, fake Walrus blob IDs, or
+fake Stellar tx IDs. Missing storage configuration blocks the action.
+
+### Current live behavior
+
+```text
+Freighter route
+  Browser encrypts round metadata
+      -> Walrus publisher returns blobId / endEpoch
+      -> Freighter signs Soroban create_round
+      -> Freighter signs attach_storage_ref(...)
+      -> participants commit / reveal / settle on Stellar
+
+EVM route
+  Browser encrypts round metadata
+      -> MetaMask signs Bosphor submitIntent
+      -> Bosphor emits IntentSubmitted(intentId)
+      -> intentId becomes the shareable Bosphor round id
+      -> participants can join by intentId
+      -> sealed score and reveal metadata are submitted as further Bosphor intents
+```
+
+For the Stellar route, the deployed Soroban contract binds the Walrus receipt
+with:
 
 ```text
 attach_storage_ref(round_id, operator, content_hash, commitment_hash,
   storage_provider, intent_id, blob_id, end_epoch)
 ```
 
-This keeps the separation explicit: Walrus stores encrypted heavy data through
-the application/Bosphor route, while Stellar/Soroban stores only the compact
-Sub Rosa proof reference and remains the fairness, reveal, and settlement
-layer. A deployed contract must include `attach_storage_ref` and
+For the EVM route, `IntentSubmitted` is treated as the accepted storage intent.
+`IntentExecuted(intentId, proof)` is the later Bosphor/Sui/LayerZero proof
+return path. The UI does not block the user on that final proof event because
+the accepted intent is already a real on-chain Bosphor record. The EVM route is
+explicitly a Walrus storage route; it does not claim that MetaMask can sign
+Soroban transactions or replace Stellar settlement.
+
+A deployed Stellar contract must include `attach_storage_ref` and
 `get_storage_ref`; older testnet contract IDs that only expose `create_round`
 cannot bind the Walrus receipt on-chain.
 
