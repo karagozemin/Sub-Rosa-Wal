@@ -199,25 +199,6 @@ function PhaseGuide(props: {
     ctaLabel = useCase.commitCta;
     cta = commitEntry;
     showInput = true;
-  } else if (!address && walletRoute === "bosphor-walrus" && evm.connected) {
-    tone = "ready";
-    eyebrow = "Storage route";
-    title = "Bosphor → Walrus connected";
-    detail =
-      "Encrypted Sub Rosa metadata will be stored through Bosphor with this EVM wallet. Stellar/Soroban proof and settlement stay separate.";
-    timerValue = evm.wrongChain ? "wrong chain" : BOSPHOR_CHAIN.name;
-    ctaLabel = evm.wrongChain ? "Switch EVM chain" : `Store via Bosphor · ${formatDurationLabel(duration)}`;
-    cta = evm.wrongChain ? evm.switchToBosphorChain : () => createRound(duration);
-    showJoin = true;
-    if (!storageConfigured) {
-      tone = "danger";
-      eyebrow = "Storage setup";
-      title = "Bosphor storage not configured";
-      detail = `Add the missing env vars before storing encrypted metadata: ${storageMissing.join(", ")}.`;
-      timerValue = "env";
-      ctaLabel = "Missing Bosphor env";
-      ctaDisabled = true;
-    }
   } else if (walletRoute === "stellar-walrus" && address && !canUseContract) {
     tone = "danger";
     eyebrow = "Setup";
@@ -225,6 +206,14 @@ function PhaseGuide(props: {
     detail = "Set VITE_CONTRACT_ID in apps/web/.env.local and restart the dev server.";
     timerValue = "env";
     ctaLabel = "Missing env";
+    ctaDisabled = true;
+  } else if (walletRoute === "bosphor-walrus" && !evm.connected) {
+    tone = "idle";
+    eyebrow = "Wallet";
+    title = "Connect EVM";
+    detail = "Connect MetaMask/RainbowKit to create or join a Bosphor → Walrus backed round.";
+    timerValue = "wallet";
+    ctaLabel = "Use EVM button above";
     ctaDisabled = true;
   } else if (
     (walletRoute === "stellar-walrus"

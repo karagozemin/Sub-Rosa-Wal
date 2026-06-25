@@ -381,10 +381,16 @@ export function useRoundSession(
         );
         return;
       }
-      if (storageReceipt.status !== "executed" || !storageReceipt.walrusBlobId) {
+      if (
+        storageReceipt.storageProvider === "bosphor-walrus" &&
+        (storageReceipt.status !== "executed" || !storageReceipt.walrusBlobId)
+      ) {
         throw new Error(
           "Bosphor intent is pending. Wait for IntentExecuted proof before attaching the storage reference on Stellar.",
         );
+      }
+      if (!storageReceipt.walrusBlobId) {
+        throw new Error("Walrus storage did not return a blob id.");
       }
       if (!stellarContract || !stellarAddress) {
         throw new Error("Connect Freighter to create and attach the Stellar/Soroban proof reference.");
