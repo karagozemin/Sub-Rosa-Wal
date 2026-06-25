@@ -117,6 +117,7 @@ function PhaseGuide(props: {
   suggestedRoundId: bigint | null;
   storageConfigured: boolean;
   storageMissing: string[];
+  storageReceipt: StorageReceipt | null;
   evm: EvmRoundWalletState;
   walletRoute: ActiveWalletRoute;
 }) {
@@ -141,6 +142,7 @@ function PhaseGuide(props: {
     suggestedRoundId,
     storageConfigured,
     storageMissing,
+    storageReceipt,
     evm,
     walletRoute,
   } = props;
@@ -175,7 +177,19 @@ function PhaseGuide(props: {
   let showInput = false;
   let showJoin = false;
 
-  if (!address && walletRoute === "bosphor-walrus" && evm.connected) {
+  if (walletRoute === "bosphor-walrus" && storageReceipt) {
+    tone = storageReceipt.status === "pending" ? "wait" : "complete";
+    eyebrow = storageReceipt.status === "pending" ? "Bosphor intent submitted" : "Walrus receipt ready";
+    title = storageReceipt.status === "pending" ? "Storage intent pending" : "Encrypted metadata stored";
+    detail =
+      storageReceipt.status === "pending"
+        ? "The EVM transaction is confirmed. Waiting for Bosphor to emit IntentExecuted with the Walrus proof."
+        : "Bosphor returned the Walrus storage proof. Stellar/Soroban proof and settlement remain separate.";
+    timerLabel = storageReceipt.status === "pending" ? "Intent" : "Blob";
+    timerValue = shortAddr(storageReceipt.walrusBlobId || storageReceipt.intentId || storageReceipt.evmTxHash, 6);
+    ctaLabel = storageReceipt.status === "pending" ? "Intent pending" : "Storage ready";
+    ctaDisabled = true;
+  } else if (!address && walletRoute === "bosphor-walrus" && evm.connected) {
     tone = "ready";
     eyebrow = "Storage route";
     title = "Bosphor → Walrus connected";
@@ -815,6 +829,7 @@ function LivePanel({
         openAndReveal={() => void openAndReveal()}
         storageConfigured={getStorageConfigStatus(walletRoute).ok}
         storageMissing={getStorageConfigStatus(walletRoute).missing}
+        storageReceipt={storageReceipt}
         evm={evm}
         walletRoute={walletRoute}
       />
