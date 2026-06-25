@@ -180,11 +180,21 @@ function PhaseGuide(props: {
     eyebrow = "Storage route";
     title = "Bosphor → Walrus connected";
     detail =
-      "Encrypted metadata can be stored through Bosphor with this EVM wallet. Stellar round creation still needs Freighter because Rainbow cannot sign Soroban transactions.";
+      "Encrypted Sub Rosa metadata will be stored through Bosphor with this EVM wallet. Stellar/Soroban proof and settlement stay separate.";
     timerValue = evm.wrongChain ? "wrong chain" : BOSPHOR_CHAIN.name;
-    ctaLabel = evm.wrongChain ? "Switch EVM chain" : "Connect Freighter for rounds";
-    cta = evm.wrongChain ? evm.switchToBosphorChain : connect;
-  } else if (address && !canUseContract) {
+    ctaLabel = evm.wrongChain ? "Switch EVM chain" : `Store via Bosphor · ${formatDurationLabel(duration)}`;
+    cta = evm.wrongChain ? evm.switchToBosphorChain : () => createRound(duration);
+    showJoin = false;
+    if (!storageConfigured) {
+      tone = "danger";
+      eyebrow = "Storage setup";
+      title = "Bosphor storage not configured";
+      detail = `Add the missing env vars before storing encrypted metadata: ${storageMissing.join(", ")}.`;
+      timerValue = "env";
+      ctaLabel = "Missing Bosphor env";
+      ctaDisabled = true;
+    }
+  } else if (walletRoute === "stellar-walrus" && address && !canUseContract) {
     tone = "danger";
     eyebrow = "Setup";
     title = "Contract not configured";
@@ -192,16 +202,21 @@ function PhaseGuide(props: {
     timerValue = "env";
     ctaLabel = "Missing env";
     ctaDisabled = true;
-  } else if (address && roundId == null) {
+  } else if ((walletRoute === "stellar-walrus" ? Boolean(address) : evm.connected) && roundId == null) {
     tone = "ready";
     eyebrow = "Step 1 · sealed round";
     title = "Create a round";
     detail =
-      "Pick a commit window length. The encrypted Sub Rosa round metadata is stored through Bosphor → Walrus before the Stellar round is created.";
+      walletRoute === "bosphor-walrus"
+        ? "Pick a commit window length. The encrypted Sub Rosa metadata is stored through Bosphor → Walrus with the active EVM wallet."
+        : "Pick a commit window length. The encrypted Sub Rosa round metadata is stored on Walrus before the Stellar round is created.";
     timerValue = `~${formatDurationLabel(duration)} window`;
-    ctaLabel = `Create · ${formatDurationLabel(duration)}`;
+    ctaLabel =
+      walletRoute === "bosphor-walrus"
+        ? `Store via Bosphor · ${formatDurationLabel(duration)}`
+        : `Create · ${formatDurationLabel(duration)}`;
     cta = () => createRound(duration);
-    showJoin = true;
+    showJoin = walletRoute === "stellar-walrus";
     if (!storageConfigured) {
       tone = "danger";
       eyebrow = "Storage setup";
@@ -770,7 +785,7 @@ function LivePanel({
 
       <PhaseGuide
         useCase={active}
-        address={address}
+        address={activeAccount}
         canUseContract={canUseContract}
         roundId={roundId}
         committed={committed}
@@ -787,7 +802,7 @@ function LivePanel({
         suggestedRoundId={DEFAULT_ROUND_ID}
         commitEntry={() => void commitEntry()}
         openAndReveal={() => void openAndReveal()}
-        storageConfigured={getStorageConfigStatus().ok}
+        storageConfigured={getStorageConfigStatus(walletRoute).ok}
         storageMissing={getStorageConfigStatus(walletRoute).missing}
         evm={evm}
         walletRoute={walletRoute}

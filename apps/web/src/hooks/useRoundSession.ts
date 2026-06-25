@@ -212,19 +212,8 @@ export function useRoundSession(
   }
 
   async function createRound(commitWindowSeconds: number = LIVE_COMMIT_WINDOW_SECONDS) {
-    if (!CONTRACT_ID) {
-      toast.push("error", "Contract not configured", "Set VITE_CONTRACT_ID in apps/web/.env.local");
-      return;
-    }
-    if (LEGACY_STORAGE_REF_MISSING_CONTRACTS.has(CONTRACT_ID)) {
-      toast.push(
-        "error",
-        "Contract needs redeploy",
-        "The configured Soroban contract does not expose attach_storage_ref. Deploy the current WASM and update VITE_CONTRACT_ID before creating Walrus-backed rounds.",
-      );
-      return;
-    }
-    if (!contract || !address) return;
+    let stellarContract = contract;
+    let stellarAddress = address;
     const storageConfig = getStorageConfigStatus(activeRoute);
     if (!storageConfig.ok) {
       toast.push(
@@ -244,11 +233,35 @@ export function useRoundSession(
         return;
       }
     }
+    if (activeRoute === "stellar-walrus") {
+      if (!CONTRACT_ID) {
+        toast.push("error", "Contract not configured", "Set VITE_CONTRACT_ID in apps/web/.env.local");
+        return;
+      }
+      if (LEGACY_STORAGE_REF_MISSING_CONTRACTS.has(CONTRACT_ID)) {
+        toast.push(
+          "error",
+          "Contract needs redeploy",
+          "The configured Soroban contract does not expose attach_storage_ref. Deploy the current WASM and update VITE_CONTRACT_ID before creating Walrus-backed rounds.",
+        );
+        return;
+      }
+      if (!stellarContract || !stellarAddress) {
+        toast.push("error", "Connect Freighter", "Freighter signs the Stellar/Soroban round transaction.");
+        return;
+      }
+    } else {
+      stellarContract = null;
+      stellarAddress = null;
+    }
     const id = active.id;
+    const submitter = activeRoute === "bosphor-walrus" ? String(evm!.address) : stellarAddress!;
     const workingId = toast.push(
       "working",
-      "Creating sealed round…",
-      `Commit window: ${commitWindowSeconds}s · signing with Freighter`,
+      activeRoute === "bosphor-walrus" ? "Creating Bosphor storage receipt…" : "Creating sealed round…",
+      activeRoute === "bosphor-walrus"
+        ? `Commit window metadata: ${commitWindowSeconds}s · signing with MetaMask`
+        : `Commit window: ${commitWindowSeconds}s · signing with Freighter`,
     );
     setStatus("working");
     try {
@@ -260,11 +273,11 @@ export function useRoundSession(
       const commitDeadline = tReveal - LIVE_COMMIT_CLOSE_BEFORE_REVEAL_SECONDS;
       const revealDeadline = tReveal + LIVE_REVEAL_WINDOW_AFTER_REVEAL_SECONDS;
       const auditor = generateAuditorKeypair();
-      const itemRef = await sha256Bytes(`${active.id}:${address}:${Date.now()}`);
+      const itemRef = await sha256Bytes(`${active.id}:${submitter}:${Date.now()}`);
       const storagePlaintext = {
         useCase: active.id,
         actorRole: active.actorRole,
-        submitter: address,
+        submitter,
         storageRoute: activeRoute,
         itemRef: Buffer.from(itemRef).toString("hex"),
         revealRound,
@@ -275,13 +288,13 @@ export function useRoundSession(
       const encrypted = await encryptForDemo(storagePlaintext);
       const commitmentHash = await createCommitmentHash({
         roundId: `pending:${active.id}:${Date.now()}`,
-        submitter: address,
+        submitter,
         contentHash: encrypted.contentHash,
       });
       const storagePayload = {
         protocol: "sub-rosa-round-storage-v1" as const,
         useCase: active.id,
-        submitter: address,
+        submitter,
         itemRef: Buffer.from(itemRef).toString("hex"),
         revealRound: String(revealRound),
         commitDeadline: String(commitDeadline),
@@ -310,8 +323,27 @@ export function useRoundSession(
               contentHash: encrypted.contentHash,
             });
       push(`Walrus storage proof received · ${storageReceipt.walrusBlobId.slice(0, 10)}…`, id);
-      const tx = await contract.create_round({
-        operator: address,
+      if (activeRoute === "bosphor-walrus") {
+        updateSession(id, {
+          auditorPublicKey: auditor.publicKey,
+          roundCreatedAt: Date.now(),
+          commitValue: null,
+          sealedCiphertext: null,
+          live: null,
+          storageReceipt,
+        });
+        setStatus("ok");
+        const msg = `Bosphor → Walrus receipt created · ${storageReceipt.walrusBlobId.slice(0, 10)}…`;
+        push("EVM route stored encrypted metadata. Stellar proof/settlement is not signed by MetaMask.", id);
+        toast.dismiss(workingId);
+        toast.push("success", "Walrus storage ready", msg);
+        return;
+      }
+      if (!stellarContract || !stellarAddress) {
+        throw new Error("Connect Freighter to create and attach the Stellar/Soroban proof reference.");
+      }
+      const tx = await stellarContract.create_round({
+        operator: stellarAddress,
         item_ref: Buffer.from(itemRef),
         reveal_round: BigInt(revealRound),
         clearing_rule: { tag: "HighestBid", values: undefined },
@@ -321,9 +353,9 @@ export function useRoundSession(
       });
       const sent = await tx.signAndSend();
       const nextRoundId = sent.result.unwrap() as bigint;
-      const attachTx = await contract.attach_storage_ref({
+      const attachTx = await stellarContract.attach_storage_ref({
         round_id: nextRoundId,
-        operator: address,
+        operator: stellarAddress,
         content_hash: hexToBuffer(encrypted.contentHash),
         commitment_hash: hexToBuffer(commitmentHash),
         storage_provider: storageReceipt.storageProvider,
