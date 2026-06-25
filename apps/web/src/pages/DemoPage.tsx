@@ -54,6 +54,8 @@ function FlowSteps({
   address,
   accountLabel,
   roundId,
+  roundDone,
+  roundDetail,
   committed,
   revealed,
   working,
@@ -61,13 +63,15 @@ function FlowSteps({
   address: string | null;
   accountLabel: string | null;
   roundId: bigint | null;
+  roundDone?: boolean;
+  roundDetail?: string;
   committed: boolean;
   revealed: boolean;
   working: boolean;
 }) {
   const steps = [
     { label: "Wallet", detail: accountLabel ?? "connect", done: Boolean(address) },
-    { label: "Round", detail: roundId == null ? "create" : `#${roundId}`, done: roundId != null },
+    { label: "Round", detail: roundDetail ?? (roundId == null ? "create" : `#${roundId}`), done: roundDone ?? roundId != null },
     { label: "Seal", detail: committed ? "on-chain" : "commit", done: committed },
     { label: "Reveal", detail: revealed ? "opened" : "after R", done: revealed },
   ];
@@ -111,7 +115,6 @@ function PhaseGuide(props: {
   onEntryChange: (v: number) => void;
   connect: () => void;
   createRound: (durationSeconds: number) => void;
-  checkStorageProof: () => void;
   joinRound: (id: string) => void;
   commitEntry: () => void;
   openAndReveal: () => void;
@@ -137,7 +140,6 @@ function PhaseGuide(props: {
     onEntryChange,
     connect,
     createRound,
-    checkStorageProof,
     joinRound,
     commitEntry,
     openAndReveal,
@@ -179,19 +181,23 @@ function PhaseGuide(props: {
   let showInput = false;
   let showJoin = false;
 
-  if (walletRoute === "bosphor-walrus" && storageReceipt) {
-    tone = "complete";
-    eyebrow = storageReceipt.status === "submitted" ? "Bosphor intent accepted" : "Walrus receipt ready";
-    title = storageReceipt.status === "submitted" ? "Storage intent accepted" : "Encrypted metadata stored";
-    detail =
-      storageReceipt.status === "submitted"
-        ? "The EVM transaction is confirmed and the real Bosphor intent id is recorded. Final Walrus proof can be refreshed when the executor emits IntentExecuted."
-        : "Bosphor returned the Walrus storage proof. Stellar/Soroban proof and settlement remain separate.";
-    timerLabel = storageReceipt.status === "submitted" ? "Intent" : "Blob";
+  if (walletRoute === "bosphor-walrus" && storageReceipt && !committed) {
+    tone = "urgent";
+    eyebrow = `Step 2 · ${useCase.actorRole} commit`;
+    title =
+      useCase.inputKind === "ballot"
+        ? "Cast your sealed ballot"
+        : useCase.inputKind === "score"
+          ? "Submit your sealed score"
+          : useCase.id === "bounty"
+            ? "Place your sealed bid"
+            : "Submit your sealed allocation";
+    detail = "Bosphor accepted the round metadata intent. Now seal the private entry through the same EVM → Walrus route.";
+    timerLabel = "Intent";
     timerValue = shortAddr(storageReceipt.walrusBlobId || storageReceipt.intentId || storageReceipt.evmTxHash, 6);
-    ctaLabel = storageReceipt.status === "submitted" ? "Refresh final proof" : "Storage ready";
-    cta = checkStorageProof;
-    ctaDisabled = storageReceipt.status !== "submitted" || working;
+    ctaLabel = useCase.commitCta;
+    cta = commitEntry;
+    showInput = true;
   } else if (!address && walletRoute === "bosphor-walrus" && evm.connected) {
     tone = "ready";
     eyebrow = "Storage route";
@@ -283,6 +289,14 @@ function PhaseGuide(props: {
     timerValue = "closed";
     ctaLabel = "New round";
     cta = () => createRound(duration);
+  } else if (walletRoute === "bosphor-walrus" && committed && revealedCount === 0) {
+    tone = "ready";
+    eyebrow = "Step 3 · reveal";
+    title = "Open the stored entry";
+    detail = "The sealed entry intent is accepted. Publish the reveal metadata through Bosphor → Walrus.";
+    timerValue = "ready";
+    ctaLabel = "Open + reveal";
+    cta = openAndReveal;
   } else if (committed && revealedCount > 0) {
     tone = "complete";
     eyebrow = "Done · revealed";
@@ -693,7 +707,6 @@ function LivePanel({
     storageReceipt,
     connect,
     createRound,
-    checkStorageProof,
     joinRound,
     commitEntry,
     openAndReveal,
@@ -820,6 +833,12 @@ function LivePanel({
         address={activeAccount}
         accountLabel={accountLabel}
         roundId={roundId}
+        roundDone={walletRoute === "bosphor-walrus" ? Boolean(storageReceipt) : roundId != null}
+        roundDetail={
+          walletRoute === "bosphor-walrus" && storageReceipt
+            ? shortAddr(storageReceipt.intentId || storageReceipt.evmTxHash, 5)
+            : undefined
+        }
         committed={committed}
         revealed={revealedCount > 0}
         working={status === "working"}
@@ -840,7 +859,6 @@ function LivePanel({
         onEntryChange={setEntryValue}
         connect={() => void connect()}
         createRound={(duration) => void createRound(duration)}
-        checkStorageProof={() => void checkStorageProof()}
         joinRound={(id) => void joinRound(id)}
         suggestedRoundId={DEFAULT_ROUND_ID}
         commitEntry={() => void commitEntry()}

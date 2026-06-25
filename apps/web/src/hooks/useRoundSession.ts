@@ -35,7 +35,7 @@ import {
 import { DEMO_TRACE } from "../demo/trace";
 import { formatCountdown, useDrandCountdown } from "./useDrandCountdown";
 import { useToast } from "../ui/Toast";
-import { fetchBosphorIntentExecution, submitBosphorIntent } from "../lib/bosphorIntent";
+import { submitBosphorIntent } from "../lib/bosphorIntent";
 import type { StorageReceipt } from "../lib/storageTypes";
 import {
   createCommitmentHash,
@@ -71,6 +71,7 @@ export interface CaseSession {
   live: LiveRound | null;
   log: string[];
   storageReceipt: StorageReceipt | null;
+  evmRevealed: boolean;
 }
 
 function emptySession(roundId: bigint | null = null): CaseSession {
@@ -83,6 +84,7 @@ function emptySession(roundId: bigint | null = null): CaseSession {
     live: null,
     log: [],
     storageReceipt: null,
+    evmRevealed: false,
   };
 }
 
@@ -130,7 +132,7 @@ export function useRoundSession(
   );
   const contract = useWalletContract(address);
   const session = sessions[active.id];
-  const { auditorPublicKey, commitValue, sealedCiphertext, live, log, roundId, roundCreatedAt, storageReceipt } =
+  const { auditorPublicKey, commitValue, sealedCiphertext, live, log, roundId, roundCreatedAt, storageReceipt, evmRevealed } =
     session;
   const canUseContract = Boolean(CONTRACT_ID && contract);
   const targetRound = live ? Number(live.round.reveal_round) : DEMO_TRACE.meta.revealRound;
@@ -140,11 +142,13 @@ export function useRoundSession(
     : null;
   const commitClosed = commitSecondsRemaining != null && commitSecondsRemaining <= 0;
   const committedOnChain = Boolean(address && live?.bidStates[address]);
+  const activeRoute = route?.activeRoute ?? "stellar-walrus";
   const committed = committedOnChain || (commitValue != null && live == null);
-  const revealedCount = live
+  const revealedCount = evmRevealed
+    ? 1
+    : live
     ? Object.values(live.bidStates).filter((state) => state.revealed_value != null).length
     : 0;
-  const activeRoute = route?.activeRoute ?? "stellar-walrus";
   const evm = route?.evm;
 
   useEffect(() => {
@@ -412,47 +416,6 @@ export function useRoundSession(
     }
   }
 
-  async function checkStorageProof() {
-    if (activeRoute !== "bosphor-walrus" || !storageReceipt) return;
-    if (storageReceipt.storageProvider !== "bosphor-walrus") return;
-    if (!evm?.publicClient) {
-      toast.push("error", "Connect EVM wallet", "RainbowKit is needed to check the Bosphor deployment chain.");
-      return;
-    }
-    if (storageReceipt.status === "executed") {
-      toast.push("success", "Walrus proof already ready", storageReceipt.walrusBlobId);
-      return;
-    }
-    const id = active.id;
-    const workingId = toast.push("working", "Checking Bosphor proof…", storageReceipt.intentId || storageReceipt.evmTxHash);
-    setStatus("working");
-    try {
-      const nextReceipt = await fetchBosphorIntentExecution({
-        publicClient: evm.publicClient,
-        receipt: { ...storageReceipt, storageProvider: "bosphor-walrus" },
-      });
-      updateSession(id, { storageReceipt: nextReceipt });
-      setStatus("ok");
-      toast.dismiss(workingId);
-      if (nextReceipt.status === "executed") {
-        const msg = `Walrus proof ready · ${nextReceipt.walrusBlobId.slice(0, 10)}…`;
-        push(msg, id);
-        toast.push("success", "Walrus proof ready", msg);
-      } else {
-        const msg = nextReceipt.intentId
-          ? "Bosphor accepted the intent. Final Walrus proof has not returned from the Sui/LayerZero executor yet."
-          : "The Bosphor transaction is confirmed, but this receipt did not expose an intent id.";
-        toast.push("info", "Intent still accepted", msg);
-      }
-    } catch (error) {
-      const msg = displayError(error);
-      setStatus("error");
-      push(msg, id);
-      toast.dismiss(workingId);
-      toast.push("error", "Proof check failed", msg);
-    }
-  }
-
   async function joinRound(idStr: string) {
     if (!contract || !address) {
       toast.push("error", "Wallet not ready", "Connect Freighter first");
@@ -509,6 +472,77 @@ export function useRoundSession(
   }
 
   async function commitEntry() {
+    if (activeRoute === "bosphor-walrus") {
+      if (!evm?.connected || !evm.address || !evm.walletClient || !evm.publicClient) {
+        toast.push("error", "Connect EVM wallet", "RainbowKit signs the Bosphor → Walrus sealed entry intent.");
+        return;
+      }
+      if (evm.wrongChain) {
+        toast.push("error", "Wrong EVM chain", "Switch to the configured Bosphor deployment chain.");
+        return;
+      }
+      if (!storageReceipt) {
+        toast.push("error", "Create storage-backed round first", "Submit the round metadata intent before sealing an entry.");
+        return;
+      }
+      const id = active.id;
+      const displayed = active.formatValue(entryValue);
+      const value = toDemoEscrowAmount(entryValue);
+      const workingId = toast.push("working", "Sealing entry through Bosphor…", `${active.inputLabel}: ${displayed}`);
+      setStatus("working");
+      try {
+        const plaintext = {
+          useCase: active.id,
+          actorRole: active.actorRole,
+          action: "commit",
+          submitter: evm.address,
+          roundIntentId: storageReceipt.intentId,
+          value: value.toString(),
+          displayed,
+          createdAt: new Date().toISOString(),
+        };
+        const encrypted = await encryptForDemo(plaintext);
+        const commitmentHash = await createCommitmentHash({
+          roundId: storageReceipt.intentId || storageReceipt.evmTxHash,
+          submitter: evm.address,
+          contentHash: encrypted.contentHash,
+        });
+        const receipt = await submitBosphorIntent({
+          walletClient: evm.walletClient,
+          publicClient: evm.publicClient,
+          account: evm.address,
+          input: {
+            protocol: "sub-rosa-round-storage-v1",
+            useCase: active.id,
+            submitter: evm.address,
+            itemRef: storageReceipt.intentId || storageReceipt.evmTxHash,
+            revealRound: String(targetRound),
+            commitDeadline: String(Math.floor(Date.now() / 1000) + LIVE_COMMIT_WINDOW_SECONDS),
+            revealDeadline: String(Math.floor(Date.now() / 1000) + LIVE_REVEAL_WINDOW_AFTER_REVEAL_SECONDS),
+            contentHash: encrypted.contentHash,
+            commitmentHash,
+            encryptedPayload: encrypted.encryptedPayload,
+          },
+        });
+        updateSession(id, {
+          commitValue: value,
+          storageReceipt: receipt,
+          evmRevealed: false,
+        });
+        setStatus("ok");
+        const msg = `Sealed entry accepted by Bosphor · ${(receipt.intentId || receipt.evmTxHash).slice(0, 10)}…`;
+        push(msg, id);
+        toast.dismiss(workingId);
+        toast.push("success", "Entry sealed through Bosphor", msg);
+      } catch (error) {
+        const msg = displayError(error);
+        setStatus("error");
+        push(msg, id);
+        toast.dismiss(workingId);
+        toast.push("error", "Commit failed", msg);
+      }
+      return;
+    }
     if (!contract || !address || roundId == null) return;
     const id = active.id;
     const displayed = active.formatValue(entryValue);
@@ -558,6 +592,72 @@ export function useRoundSession(
   }
 
   async function openAndReveal() {
+    if (activeRoute === "bosphor-walrus") {
+      if (!evm?.connected || !evm.address || !evm.walletClient || !evm.publicClient) {
+        toast.push("error", "Connect EVM wallet", "RainbowKit signs the Bosphor → Walrus reveal intent.");
+        return;
+      }
+      if (evm.wrongChain) {
+        toast.push("error", "Wrong EVM chain", "Switch to the configured Bosphor deployment chain.");
+        return;
+      }
+      if (commitValue == null || !storageReceipt) {
+        toast.push("error", "No sealed entry", "Seal an entry through Bosphor before reveal.");
+        return;
+      }
+      const id = active.id;
+      const workingId = toast.push("working", "Publishing reveal through Bosphor…", "Encrypted reveal metadata");
+      setStatus("working");
+      try {
+        const plaintext = {
+          useCase: active.id,
+          action: "reveal",
+          submitter: evm.address,
+          sealedIntentId: storageReceipt.intentId,
+          value: commitValue.toString(),
+          revealedAt: new Date().toISOString(),
+        };
+        const encrypted = await encryptForDemo(plaintext);
+        const commitmentHash = await createCommitmentHash({
+          roundId: storageReceipt.intentId || storageReceipt.evmTxHash,
+          submitter: evm.address,
+          contentHash: encrypted.contentHash,
+        });
+        const receipt = await submitBosphorIntent({
+          walletClient: evm.walletClient,
+          publicClient: evm.publicClient,
+          account: evm.address,
+          input: {
+            protocol: "sub-rosa-round-storage-v1",
+            useCase: active.id,
+            submitter: evm.address,
+            itemRef: storageReceipt.intentId || storageReceipt.evmTxHash,
+            revealRound: String(targetRound),
+            commitDeadline: String(Math.floor(Date.now() / 1000)),
+            revealDeadline: String(Math.floor(Date.now() / 1000) + LIVE_REVEAL_WINDOW_AFTER_REVEAL_SECONDS),
+            contentHash: encrypted.contentHash,
+            commitmentHash,
+            encryptedPayload: encrypted.encryptedPayload,
+          },
+        });
+        updateSession(id, {
+          storageReceipt: receipt,
+          evmRevealed: true,
+        });
+        setStatus("ok");
+        const msg = `Reveal accepted by Bosphor · ${(receipt.intentId || receipt.evmTxHash).slice(0, 10)}…`;
+        push(msg, id);
+        toast.dismiss(workingId);
+        toast.push("success", "Reveal published through Bosphor", msg);
+      } catch (error) {
+        const msg = displayError(error);
+        setStatus("error");
+        push(msg, id);
+        toast.dismiss(workingId);
+        toast.push("error", "Reveal failed", msg);
+      }
+      return;
+    }
     if (!contract || roundId == null) return;
     const id = active.id;
     if (live && !drandGate.published) {
@@ -690,7 +790,6 @@ export function useRoundSession(
     storageReceipt,
     connect,
     createRound,
-    checkStorageProof,
     joinRound,
     commitEntry,
     openAndReveal,
