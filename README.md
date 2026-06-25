@@ -42,7 +42,7 @@ Browser
       └─ RainbowKit route
            -> Bosphor submitIntent on EVM
            -> IntentSubmitted(intentId)
-           -> intentId is the shareable storage-backed round id
+           -> intentId becomes the shareable storage-route identifier
            -> later sealed score/reveal metadata use more Bosphor intents
 ```
 
@@ -64,74 +64,6 @@ This repo replaces that storage assumption with encrypted Walrus payloads while
 leaving fairness, reveal, escrow, clearing, and settlement on Stellar/Soroban.
 Walrus holds the heavy encrypted payloads; Sub Rosa keeps the sealed round state
 machine and proof references.
-
----
-
-## Protocol integration model
-
-Other applications can embed the Sub Rosa primitive directly and add Walrus
-storage at the application layer:
-
-```bash
-npm install @sub-rosa/sdk
-```
-
-```ts
-import { SubRosaClient } from "@sub-rosa/sdk";
-import { sealBid, quicknet } from "@sub-rosa/tlock";
-
-const client = new SubRosaClient({
-  rpcUrl,
-  networkPassphrase,
-  contractId,
-  secretKey,
-});
-
-const sealed = await sealBid({
-  value,
-  nonce,
-  round: revealRound,
-  client: quicknet(),
-  identity,
-  auditorPublicKey,
-});
-
-await client.commit({ roundId, sealed, escrow });
-```
-
-The application can be a DAO tool, judging panel, sealed auction, RFP workflow,
-or evidence-heavy review system. Sub Rosa supplies the sealed round state
-machine; Walrus supplies encrypted payload availability.
-
----
-
-## Deployed artifacts
-
-### Mainnet (settlement smoke)
-
-| Field | Value |
-| --- | --- |
-| Contract | [`CA7KSDEYJEPGZEB2ZROTLUWKQQ6GIRIQNGG6Z745MZ34QHP4UJPWODEX`](https://stellar.expert/explorer/public/contract/CA7KSDEYJEPGZEB2ZROTLUWKQQ6GIRIQNGG6Z745MZ34QHP4UJPWODEX) |
-| WASM hash | `353915ad440965ea5f8d92fdb8d93cb2e309fb365e68e6762bca7fd6762b30c7` |
-| Round | 1 · **Settled** |
-| Drand R | 29,174,905 |
-| Token | Native XLM SAC |
-| Bid / escrow | **1 XLM / 5 XLM** (not testnet 700 USDC demo) |
-
-```bash
-pnpm mainnet:verify          # read-only — no secrets
-pnpm mainnet:micro           # dry-run checklist; --execute needs MAINNET_CONFIRM
-```
-
-### Testnet (full product + UI trace)
-
-| Field | Value |
-| --- | --- |
-| Contract (UI / agents:e2e) | [`CAPTODBCDEVIK23ALBJBS2TXRTIK47ZA5MBTHYF4XLHG2BK7JPYUCU2Y`](https://stellar.expert/explorer/testnet/contract/CAPTODBCDEVIK23ALBJBS2TXRTIK47ZA5MBTHYF4XLHG2BK7JPYUCU2Y) |
-| Drand R | 29,176,840 |
-| Canonical trace | `apps/web/src/demo/demo-trace.generated.ts` (from `pnpm agents:e2e`) |
-
----
 
 ## Architecture / route table
 
@@ -212,6 +144,74 @@ Sub Rosa's underlying fairness primitive is unchanged:
 - **Seal** each bid with Drand timelock encryption (`tlock`) to a future round R.
 - **Force-open** at R: BLS12-381 verified **on-chain** — simultaneous reveal.
 - **Settle** deterministically. Identities disclosed only to the auditor.
+
+---
+
+## Protocol integration model
+
+Other applications can embed the Sub Rosa primitive directly and add Walrus
+storage at the application layer:
+
+```bash
+npm install @sub-rosa/sdk
+```
+
+```ts
+import { SubRosaClient } from "@sub-rosa/sdk";
+import { sealBid, quicknet } from "@sub-rosa/tlock";
+
+const client = new SubRosaClient({
+  rpcUrl,
+  networkPassphrase,
+  contractId,
+  secretKey,
+});
+
+const sealed = await sealBid({
+  value,
+  nonce,
+  round: revealRound,
+  client: quicknet(),
+  identity,
+  auditorPublicKey,
+});
+
+await client.commit({ roundId, sealed, escrow });
+```
+
+The application can be a DAO tool, judging panel, sealed auction, RFP workflow,
+or evidence-heavy review system. Sub Rosa supplies the sealed round state
+machine; Walrus supplies encrypted payload availability.
+
+---
+
+## Deployed artifacts
+
+### Mainnet (settlement smoke)
+
+| Field | Value |
+| --- | --- |
+| Contract | [`CA7KSDEYJEPGZEB2ZROTLUWKQQ6GIRIQNGG6Z745MZ34QHP4UJPWODEX`](https://stellar.expert/explorer/public/contract/CA7KSDEYJEPGZEB2ZROTLUWKQQ6GIRIQNGG6Z745MZ34QHP4UJPWODEX) |
+| WASM hash | `353915ad440965ea5f8d92fdb8d93cb2e309fb365e68e6762bca7fd6762b30c7` |
+| Round | 1 · **Settled** |
+| Drand R | 29,174,905 |
+| Token | Native XLM SAC |
+| Bid / escrow | **1 XLM / 5 XLM** (not testnet 700 USDC demo) |
+
+```bash
+pnpm mainnet:verify          # read-only — no secrets
+pnpm mainnet:micro           # dry-run checklist; --execute needs MAINNET_CONFIRM
+```
+
+### Testnet (full product + UI trace)
+
+| Field | Value |
+| --- | --- |
+| Contract (UI / agents:e2e) | [`CAPTODBCDEVIK23ALBJBS2TXRTIK47ZA5MBTHYF4XLHG2BK7JPYUCU2Y`](https://stellar.expert/explorer/testnet/contract/CAPTODBCDEVIK23ALBJBS2TXRTIK47ZA5MBTHYF4XLHG2BK7JPYUCU2Y) |
+| Drand R | 29,176,840 |
+| Canonical trace | `apps/web/src/demo/demo-trace.generated.ts` (from `pnpm agents:e2e`) |
+
+---
 
 ## Monorepo layout
 
