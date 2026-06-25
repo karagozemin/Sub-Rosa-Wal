@@ -1,0 +1,197 @@
+.storage-page {
+  width: min(100%, 1280px);
+  margin: 0 auto;
+  padding: 24px 28px 80px;
+}
+
+.storage-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  gap: 20px;
+  align-items: stretch;
+  margin: 36px 0 18px;
+}
+
+.storage-hero > div:first-child,
+.storage-config-card {
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(16px);
+}
+
+.storage-hero > div:first-child {
+  padding: clamp(28px, 4vw, 46px);
+}
+
+.storage-hero h1 {
+  max-width: 820px;
+  margin-top: 22px;
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  line-height: 0.98;
+}
+
+.storage-hero .lede {
+  margin-top: 20px;
+}
+
+.storage-config-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  padding: 26px;
+}
+
+.storage-config-card span,
+.storage-config-card code,
+.storage-receipt dt,
+.storage-flow span {
+  font-family: var(--mono);
+}
+
+.storage-config-card span,
+.storage-receipt dt {
+  color: var(--faint);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.storage-config-card strong {
+  font-family: var(--display);
+  font-size: 2rem;
+}
+
+.storage-config-card.ok strong {
+  color: var(--green);
+}
+
+.storage-config-card.missing strong,
+.storage-error {
+  color: var(--alert);
+}
+
+.storage-config-card p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.storage-config-card code {
+  display: block;
+  padding: 10px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-xs);
+  color: var(--ink-2);
+  background: rgba(0, 0, 0, 0.18);
+  word-break: break-all;
+}
+
+.storage-flow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.storage-flow article {
+  padding: 18px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius);
+  background: var(--surface-0);
+}
+
+.storage-flow span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 14px;
+  border-radius: 8px;
+  color: #ffffff;
+  background: var(--green);
+}
+
+.storage-flow strong {
+  display: block;
+  font-family: var(--display);
+  font-size: 1.05rem;
+}
+
+.storage-flow p {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.storage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(300px, 0.75fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.storage-form {
+  display: grid;
+  gap: 16px;
+}
+
+.storage-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.storage-form textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.storage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.storage-error {
+  padding: 12px 14px;
+  border: 1px solid rgba(217, 122, 115, 0.35);
+  border-radius: var(--radius-sm);
+  background: rgba(217, 122, 115, 0.08);
+}
+
+.storage-receipt dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.storage-receipt dl > div {
+  padding: 12px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.storage-receipt dd {
+  margin: 8px 0 0;
+}
+
+.storage-receipt code {
+  color: var(--ink-2);
+  word-break: break-all;
+}
+
+@media (max-width: 900px) {
+  .storage-hero,
+  .storage-grid,
+  .storage-flow {
+    grid-template-columns: 1fr;
+  }
+
+  .storage-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

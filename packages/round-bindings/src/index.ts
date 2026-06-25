@@ -1,5 +1,5 @@
 import { Buffer } from "buffer";
-import { Address } from '@stellar/stellar-sdk';
+import { Address } from "@stellar/stellar-sdk";
 import {
   AssembledTransaction,
   Client as ContractClient,
@@ -7,7 +7,7 @@ import {
   MethodOptions,
   Result,
   Spec as ContractSpec,
-} from '@stellar/stellar-sdk/contract';
+} from "@stellar/stellar-sdk/contract";
 import type {
   u32,
   i32,
@@ -18,14 +18,14 @@ import type {
   u256,
   i256,
   Option,
-  Typepoint,
+  Timepoint,
   Duration,
-} from '@stellar/stellar-sdk/contract';
-export * from '@stellar/stellar-sdk'
-export * as contract from '@stellar/stellar-sdk/contract'
-export * as rpc from '@stellar/stellar-sdk/rpc'
+} from "@stellar/stellar-sdk/contract";
+export * from "@stellar/stellar-sdk";
+export * as contract from "@stellar/stellar-sdk/contract";
+export * as rpc from "@stellar/stellar-sdk/rpc";
 
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   //@ts-ignore Buffer exists
   window.Buffer = window.Buffer || Buffer;
 }
@@ -79,7 +79,10 @@ export const Errors = {
   35: {message:"BidExceedsEscrow"},
   36: {message:"DeadlineInPast"},
   37: {message:"NoValidBids"},
-  38: {message:"RoundFull"}
+  38: {message:"RoundFull"},
+  39: {message:"StorageRefAlreadyAttached"},
+  40: {message:"StorageRefNotFound"},
+  41: {message:"NotRoundOperator"}
 }
 
 
@@ -121,7 +124,7 @@ reveal_round: u64;
  */
 export type Status = {tag: "Open", values: void} | {tag: "Revealing", values: void} | {tag: "Cleared", values: void} | {tag: "Settled", values: void} | {tag: "Voided", values: void};
 
-export type DataKey = {tag: "Config", values: void} | {tag: "RoundCounter", values: void} | {tag: "Round", values: readonly [u64]} | {tag: "State", values: readonly [u64, string]} | {tag: "Seal", values: readonly [u64, string]};
+export type DataKey = {tag: "Config", values: void} | {tag: "RoundCounter", values: void} | {tag: "Round", values: readonly [u64]} | {tag: "StorageRef", values: readonly [u64]} | {tag: "State", values: readonly [u64, string]} | {tag: "Seal", values: readonly [u64, string]};
 
 
 /**
@@ -140,6 +143,22 @@ escrow: i128;
   revealed_value: Option<i128>;
   settled: boolean;
   valid: boolean;
+}
+
+
+/**
+ * Per-round reference to encrypted heavy data stored through Bosphor/Walrus.
+ * 
+ * Stellar/Soroban remains the fairness, reveal, and settlement layer; this
+ * record only binds the round to application-layer storage proofs.
+ */
+export interface StorageRef {
+  blob_id: string;
+  commitment_hash: Buffer;
+  content_hash: Buffer;
+  end_epoch: u64;
+  intent_id: string;
+  storage_provider: string;
 }
 
 /**
@@ -174,22 +193,7 @@ export interface Client {
    * and the grace window after the reveal deadline has passed without the
    * round opening, anyone can void it and all escrow is refunded.
    */
-  void: ({round_id}: {round_id: u64}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<void>>>
+  void: ({round_id}: {round_id: u64}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a clear transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -197,22 +201,7 @@ export interface Client {
    * valid bid was revealed, the round is voided and all escrow becomes
    * refundable.
    */
-  clear: ({round_id}: {round_id: u64}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<Option<string>>>>
+  clear: ({round_id}: {round_id: u64}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Option<string>>>>
 
   /**
    * Construct and simulate a commit transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -224,22 +213,7 @@ export interface Client {
    * locked now so the winner can always pay.
    * - `auditor_blob` is the bidder identity encrypted to the auditor key.
    */
-  commit: ({round_id, bidder, commitment, ciphertext, escrow, auditor_blob}: {round_id: u64, bidder: string, commitment: Buffer, ciphertext: Buffer, escrow: i128, auditor_blob: Buffer}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<void>>>
+  commit: ({round_id, bidder, commitment, ciphertext, escrow, auditor_blob}: {round_id: u64, bidder: string, commitment: Buffer, ciphertext: Buffer, escrow: i128, auditor_blob: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a reveal transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -247,22 +221,7 @@ export interface Client {
    * decrypt any ciphertext and submit the reveal — so no bidder can abort.
    * The contract checks `sha256(be16(value) ‖ nonce) == H`.
    */
-  reveal: ({round_id, bidder, value, nonce}: {round_id: u64, bidder: string, value: i128, nonce: Buffer}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<void>>>
+  reveal: ({round_id, bidder, value, nonce}: {round_id: u64, bidder: string, value: i128, nonce: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a settle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -270,84 +229,24 @@ export interface Client {
    * operator; the winner's surplus and every loser's escrow are refunded.
    * Cannot fail for lack of funds — everything was escrowed at commit.
    */
-  settle: ({round_id}: {round_id: u64}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<void>>>
+  settle: ({round_id}: {round_id: u64}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a get_seal transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Observer view: the sealed ciphertext + auditor blob, while still in
    * Temporary storage. Visibly unreadable during the sealed phase.
    */
-  get_seal: ({round_id, bidder}: {round_id: u64, bidder: string}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Option<Seal>>>
+  get_seal: ({round_id, bidder}: {round_id: u64, bidder: string}, options?: MethodOptions) => Promise<AssembledTransaction<Option<Seal>>>
 
   /**
    * Construct and simulate a get_round transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  get_round: ({round_id}: {round_id: u64}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<Round>>>
+  get_round: ({round_id}: {round_id: u64}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Round>>>
 
   /**
    * Construct and simulate a get_config transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  get_config: (options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<GlobalConfig>>>
+  get_config: (options?: MethodOptions) => Promise<AssembledTransaction<Result<GlobalConfig>>>
 
   /**
    * Construct and simulate a get_bidders transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -356,22 +255,7 @@ export interface Client {
    * revealed — the reveal set is on-chain state, so no event scraping or
    * indexer is required and nothing can be missed.
    */
-  get_bidders: ({round_id}: {round_id: u64}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<Array<string>>>>
+  get_bidders: ({round_id}: {round_id: u64}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Array<string>>>>
 
   /**
    * Construct and simulate a open_reveal transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -380,64 +264,34 @@ export interface Client {
    * The supplied signature is verified on-chain via BLS12-381. This is the
    * only way to move a round into `Revealing`; there is no operator override.
    */
-  open_reveal: ({round_id, drand_signature}: {round_id: u64, drand_signature: Buffer}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<void>>>
+  open_reveal: ({round_id, drand_signature}: {round_id: u64, drand_signature: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a create_round transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Open a new sealed round. Permissionless: anyone can be an operator, and
    * the operator gets no special read power — that is the point.
    */
-  create_round: ({operator, item_ref, reveal_round, clearing_rule, commit_deadline, reveal_deadline, auditor_pubkey}: {operator: string, item_ref: Buffer, reveal_round: u64, clearing_rule: ClearingRule, commit_deadline: u64, reveal_deadline: u64, auditor_pubkey: Buffer}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
-
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
-
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<u64>>>
+  create_round: ({operator, item_ref, reveal_round, clearing_rule, commit_deadline, reveal_deadline, auditor_pubkey}: {operator: string, item_ref: Buffer, reveal_round: u64, clearing_rule: ClearingRule, commit_deadline: u64, reveal_deadline: u64, auditor_pubkey: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<u64>>>
 
   /**
    * Construct and simulate a get_bid_state transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  get_bid_state: ({round_id, bidder}: {round_id: u64, bidder: string}, options?: {
-    /**
-     * The fee to pay for the transaction. Default: BASE_FEE
-     */
-    fee?: number;
+  get_bid_state: ({round_id, bidder}: {round_id: u64, bidder: string}, options?: MethodOptions) => Promise<AssembledTransaction<Result<BidState>>>
 
-    /**
-     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-     */
-    timeoutInSeconds?: number;
+  /**
+   * Construct and simulate a get_storage_ref transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   */
+  get_storage_ref: ({round_id}: {round_id: u64}, options?: MethodOptions) => Promise<AssembledTransaction<Result<StorageRef>>>
 
-    /**
-     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-     */
-    simulate?: boolean;
-  }) => Promise<AssembledTransaction<Result<BidState>>>
+  /**
+   * Construct and simulate a attach_storage_ref transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Attach the Bosphor/Walrus storage reference for a round.
+   * 
+   * The encrypted heavy payload lives outside Stellar. This record anchors
+   * the compact proof fields needed to bind a Sub Rosa round to that storage
+   * receipt without making Stellar call Bosphor or Walrus.
+   */
+  attach_storage_ref: ({round_id, operator, content_hash, commitment_hash, storage_provider, intent_id, blob_id, end_epoch}: {round_id: u64, operator: string, content_hash: Buffer, commitment_hash: Buffer, storage_provider: string, intent_id: string, blob_id: string, end_epoch: u64}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
 }
 export class Client extends ContractClient {
@@ -472,12 +326,15 @@ export class Client extends ContractClient {
         "AAAAAAAAAIZPcGVuIGEgbmV3IHNlYWxlZCByb3VuZC4gUGVybWlzc2lvbmxlc3M6IGFueW9uZSBjYW4gYmUgYW4gb3BlcmF0b3IsIGFuZAp0aGUgb3BlcmF0b3IgZ2V0cyBubyBzcGVjaWFsIHJlYWQgcG93ZXIg4oCUIHRoYXQgaXMgdGhlIHBvaW50LgAAAAAADGNyZWF0ZV9yb3VuZAAAAAcAAAAAAAAACG9wZXJhdG9yAAAAEwAAAAAAAAAIaXRlbV9yZWYAAAPuAAAAIAAAAAAAAAAMcmV2ZWFsX3JvdW5kAAAABgAAAAAAAAANY2xlYXJpbmdfcnVsZQAAAAAAB9AAAAAMQ2xlYXJpbmdSdWxlAAAAAAAAAA9jb21taXRfZGVhZGxpbmUAAAAABgAAAAAAAAAPcmV2ZWFsX2RlYWRsaW5lAAAAAAYAAAAAAAAADmF1ZGl0b3JfcHVia2V5AAAAAAAOAAAAAQAAA+kAAAAGAAAAAw==",
         "AAAAAAAAAAAAAAANZ2V0X2JpZF9zdGF0ZQAAAAAAAAIAAAAAAAAACHJvdW5kX2lkAAAABgAAAAAAAAAGYmlkZGVyAAAAAAATAAAAAQAAA+kAAAfQAAAACEJpZFN0YXRlAAAAAw==",
         "AAAAAAAAAIVPbmUtdGltZSBkZXBsb3kgY29uZmlndXJhdGlvbi4gQWxsIERyYW5kIHBhcmFtZXRlcnMgYXJlIHN1cHBsaWVkIGJ5IHRoZQpkZXBsb3llciBmcm9tIHZhbHVlcyB2YWxpZGF0ZWQgYWdhaW5zdCBhIGxpdmUgcXVpY2tuZXQgcm91bmQuAAAAAAAADV9fY29uc3RydWN0b3IAAAAAAAAGAAAAAAAAAAxkcmFuZF9wdWJrZXkAAAPuAAAAwAAAAAAAAAAQZzJfbmVnX2dlbmVyYXRvcgAAA+4AAADAAAAAAAAAAANkc3QAAAAADgAAAAAAAAANZHJhbmRfZ2VuZXNpcwAAAAAAAAYAAAAAAAAADGRyYW5kX3BlcmlvZAAAAAYAAAAAAAAABHVzZGMAAAATAAAAAA==",
+        "AAAAAAAAAAAAAAAPZ2V0X3N0b3JhZ2VfcmVmAAAAAAEAAAAAAAAACHJvdW5kX2lkAAAABgAAAAEAAAPpAAAH0AAAAApTdG9yYWdlUmVmAAAAAAAD",
+        "AAAAAAAAAQBBdHRhY2ggdGhlIEJvc3Bob3IvV2FscnVzIHN0b3JhZ2UgcmVmZXJlbmNlIGZvciBhIHJvdW5kLgoKVGhlIGVuY3J5cHRlZCBoZWF2eSBwYXlsb2FkIGxpdmVzIG91dHNpZGUgU3RlbGxhci4gVGhpcyByZWNvcmQgYW5jaG9ycwp0aGUgY29tcGFjdCBwcm9vZiBmaWVsZHMgbmVlZGVkIHRvIGJpbmQgYSBTdWIgUm9zYSByb3VuZCB0byB0aGF0IHN0b3JhZ2UKcmVjZWlwdCB3aXRob3V0IG1ha2luZyBTdGVsbGFyIGNhbGwgQm9zcGhvciBvciBXYWxydXMuAAAAEmF0dGFjaF9zdG9yYWdlX3JlZgAAAAAACAAAAAAAAAAIcm91bmRfaWQAAAAGAAAAAAAAAAhvcGVyYXRvcgAAABMAAAAAAAAADGNvbnRlbnRfaGFzaAAAA+4AAAAgAAAAAAAAAA9jb21taXRtZW50X2hhc2gAAAAD7gAAACAAAAAAAAAAEHN0b3JhZ2VfcHJvdmlkZXIAAAAQAAAAAAAAAAlpbnRlbnRfaWQAAAAAAAAQAAAAAAAAAAdibG9iX2lkAAAAABAAAAAAAAAACWVuZF9lcG9jaAAAAAAAAAYAAAABAAAD6QAAA+0AAAAAAAAAAw==",
         "AAAAAQAAAI5QZXItYmlkIGVwaGVtZXJhbCBzZWFsZWQgcGF5bG9hZCAoVGVtcG9yYXJ5KS4gQXV0by1leHBpcmVzIGFmdGVyIHRoZSByZXZlYWwKd2luZG93OyB0aGUgYXV0by1leHBpcnkgaXMgdGhlIGRlc2lnbiwgbm90IGEgd29ya2Fyb3VuZCAoUFJEIMKnOCkuAAAAAAAAAAAABFNlYWwAAAACAAAARmVuYyhiaWRkZXJfaWRlbnRpdHksIGF1ZGl0b3JfcHVia2V5KSDigJQgcmVhZGFibGUgb25seSBieSB0aGUgYXVkaXRvci4AAAAAAAxhdWRpdG9yX2Jsb2IAAAAOAAAAOkMgPSB0bG9ja19lbmNyeXB0KGJlMTYodmFsdWUpIOKAliBub25jZSwgZHJhbmRfcHVia2V5LCBSKS4AAAAAAApjaXBoZXJ0ZXh0AAAAAAAO",
-        "AAAABAAAAIRDb250cmFjdCBlcnJvciBjb2Rlcy4gRXZlcnkgZmFpbHVyZSBzdGF0ZSBmcm9tIHRoZSBQUkQgaGFzIGEgZGVmaW5lZCBjb2RlIOKAlAp0aGVyZSBpcyBubyB1bmRlZmluZWQgYmVoYXZpb3IgYW5kIG5vIHNpbGVudCBmYWxsYmFjay4AAAAAAAAABUVycm9yAAAAAAAAGgAAAAAAAAAOTm90SW5pdGlhbGl6ZWQAAAAAAAEAAAAAAAAAEkFscmVhZHlJbml0aWFsaXplZAAAAAAAAgAAAAAAAAANUm91bmROb3RGb3VuZAAAAAAAAAMAAAAAAAAAC0JpZE5vdEZvdW5kAAAAAAQAAAAAAAAADENvbW1pdENsb3NlZAAAAAoAAAAAAAAAD0NvbW1pdE5vdENsb3NlZAAAAAALAAAAAAAAABlDb21taXREZWFkbGluZUFmdGVyUmV2ZWFsAAAAAAAADAAAAAAAAAANUmV2ZWFsTm90T3BlbgAAAAAAAA0AAAAAAAAAEVJldmVhbEFscmVhZHlPcGVuAAAAAAAADgAAAAAAAAASUmV2ZWFsV2luZG93Q2xvc2VkAAAAAAAPAAAAAAAAAA9SZXZlYWxTdGlsbE9wZW4AAAAAEAAAAAAAAAAKTm90Q2xlYXJlZAAAAAAAEQAAAAAAAAAOQWxyZWFkeUNsZWFyZWQAAAAAABIAAAAAAAAADkFscmVhZHlTZXR0bGVkAAAAAAATAAAAAAAAAAtSb3VuZFZvaWRlZAAAAAAUAAAAAAAAAAtOb3RWb2lkYWJsZQAAAAAVAAAAAAAAAAtXcm9uZ1N0YXR1cwAAAAAWAAAAAAAAABVJbnZhbGlkRHJhbmRTaWduYXR1cmUAAAAAAAAeAAAAAAAAAAxIYXNoTWlzbWF0Y2gAAAAfAAAAAAAAAA9BbHJlYWR5UmV2ZWFsZWQAAAAAIAAAAAAAAAAPUGF5bG9hZFRvb0xhcmdlAAAAACEAAAAAAAAADUludmFsaWRBbW91bnQAAAAAAAAiAAAAAAAAABBCaWRFeGNlZWRzRXNjcm93AAAAIwAAAAAAAAAORGVhZGxpbmVJblBhc3QAAAAAACQAAAAAAAAAC05vVmFsaWRCaWRzAAAAACUAAAAAAAAACVJvdW5kRnVsbAAAAAAAACY=",
+        "AAAABAAAAIRDb250cmFjdCBlcnJvciBjb2Rlcy4gRXZlcnkgZmFpbHVyZSBzdGF0ZSBmcm9tIHRoZSBQUkQgaGFzIGEgZGVmaW5lZCBjb2RlIOKAlAp0aGVyZSBpcyBubyB1bmRlZmluZWQgYmVoYXZpb3IgYW5kIG5vIHNpbGVudCBmYWxsYmFjay4AAAAAAAAABUVycm9yAAAAAAAAHQAAAAAAAAAOTm90SW5pdGlhbGl6ZWQAAAAAAAEAAAAAAAAAEkFscmVhZHlJbml0aWFsaXplZAAAAAAAAgAAAAAAAAANUm91bmROb3RGb3VuZAAAAAAAAAMAAAAAAAAAC0JpZE5vdEZvdW5kAAAAAAQAAAAAAAAADENvbW1pdENsb3NlZAAAAAoAAAAAAAAAD0NvbW1pdE5vdENsb3NlZAAAAAALAAAAAAAAABlDb21taXREZWFkbGluZUFmdGVyUmV2ZWFsAAAAAAAADAAAAAAAAAANUmV2ZWFsTm90T3BlbgAAAAAAAA0AAAAAAAAAEVJldmVhbEFscmVhZHlPcGVuAAAAAAAADgAAAAAAAAASUmV2ZWFsV2luZG93Q2xvc2VkAAAAAAAPAAAAAAAAAA9SZXZlYWxTdGlsbE9wZW4AAAAAEAAAAAAAAAAKTm90Q2xlYXJlZAAAAAAAEQAAAAAAAAAOQWxyZWFkeUNsZWFyZWQAAAAAABIAAAAAAAAADkFscmVhZHlTZXR0bGVkAAAAAAATAAAAAAAAAAtSb3VuZFZvaWRlZAAAAAAUAAAAAAAAAAtOb3RWb2lkYWJsZQAAAAAVAAAAAAAAAAtXcm9uZ1N0YXR1cwAAAAAWAAAAAAAAABVJbnZhbGlkRHJhbmRTaWduYXR1cmUAAAAAAAAeAAAAAAAAAAxIYXNoTWlzbWF0Y2gAAAAfAAAAAAAAAA9BbHJlYWR5UmV2ZWFsZWQAAAAAIAAAAAAAAAAPUGF5bG9hZFRvb0xhcmdlAAAAACEAAAAAAAAADUludmFsaWRBbW91bnQAAAAAAAAiAAAAAAAAABBCaWRFeGNlZWRzRXNjcm93AAAAIwAAAAAAAAAORGVhZGxpbmVJblBhc3QAAAAAACQAAAAAAAAAC05vVmFsaWRCaWRzAAAAACUAAAAAAAAACVJvdW5kRnVsbAAAAAAAACYAAAAAAAAAGVN0b3JhZ2VSZWZBbHJlYWR5QXR0YWNoZWQAAAAAAAAnAAAAAAAAABJTdG9yYWdlUmVmTm90Rm91bmQAAAAAACgAAAAAAAAAEE5vdFJvdW5kT3BlcmF0b3IAAAAp",
         "AAAAAQAAAE1QZXItcm91bmQgcmVjb3JkIChQZXJzaXN0ZW50KS4gU3Vydml2ZXMgdW50aWwgdGhlIHJvdW5kIGlzIGV4cGxpY2l0bHkgY2xvc2VkLgAAAAAAAAAAAAAFUm91bmQAAAAAAAALAAAASVB1YmxpYyBrZXkgYmlkZGVyLWlkZW50aXR5IGJsb2JzIGFyZSBlbmNyeXB0ZWQgdG8gKHNlbGVjdGl2ZSBkaXNjbG9zdXJlKS4AAAAAAAAOYXVkaXRvcl9wdWJrZXkAAAAAAA4AAAAAAAAAB2JpZGRlcnMAAAAD6gAAABMAAAAAAAAADWNsZWFyaW5nX3J1bGUAAAAAAAfQAAAADENsZWFyaW5nUnVsZQAAAC5Vbml4IHNlY29uZHMuIE11c3QgYmUgc3RyaWN0bHkgYmVmb3JlIHRpbWUoUikuAAAAAAAPY29tbWl0X2RlYWRsaW5lAAAAAAYAAACET3BhcXVlIHJlZmVyZW5jZSB0byB0aGUgaXRlbSAvIGFsbG9jYXRpb24gYmVpbmcgZGVjaWRlZCAoaGFzaCBvZiBhbgpvZmYtY2hhaW4gZGVzY3JpcHRpb24pLiBUaGUgY29udHJhY3QgaXMgYWdub3N0aWMgdG8gaXRzIG1lYW5pbmcuAAAACGl0ZW1fcmVmAAAD7gAAACAAAAAAAAAACG9wZXJhdG9yAAAAEwAAAD9Vbml4IHNlY29uZHMuIFJldmVhbCB3aW5kb3cgY2xvc2VzIGhlcmU7IG11c3QgYmUgYWZ0ZXIgdGltZShSKS4AAAAAD3JldmVhbF9kZWFkbGluZQAAAAAGAAAAQERyYW5kIHJvdW5kIG51bWJlciBSIHdob3NlIHRocmVzaG9sZCBzaWduYXR1cmUgdW5zZWFscyB0aGUgYmlkcy4AAAAMcmV2ZWFsX3JvdW5kAAAABgAAAAAAAAAGc3RhdHVzAAAAAAfQAAAABlN0YXR1cwAAAAAAAAAAAAZ3aW5uZXIAAAAAA+gAAAATAAAAAAAAAAt3aW5uaW5nX2JpZAAAAAAL",
         "AAAAAgAAADZSb3VuZCBsaWZlY3ljbGUuIE1pcnJvcnMgdGhlIHN0YXRlIG1hY2hpbmUgaW4gUFJEIMKnNi4AAAAAAAAAAAAGU3RhdHVzAAAAAAAFAAAAAAAAAAAAAAAET3BlbgAAAAAAAAAAAAAACVJldmVhbGluZwAAAAAAAAAAAAAAAAAAB0NsZWFyZWQAAAAAAAAAAAAAAAAHU2V0dGxlZAAAAAAAAAAAAAAAAAZWb2lkZWQAAA==",
-        "AAAAAgAAAAAAAAAAAAAAB0RhdGFLZXkAAAAABQAAAAAAAAAAAAAABkNvbmZpZwAAAAAAAAAAAAAAAAAMUm91bmRDb3VudGVyAAAAAQAAAAAAAAAFUm91bmQAAAAAAAABAAAABgAAAAEAAAAAAAAABVN0YXRlAAAAAAAAAgAAAAYAAAATAAAAAQAAAAAAAAAEU2VhbAAAAAIAAAAGAAAAEw==",
+        "AAAAAgAAAAAAAAAAAAAAB0RhdGFLZXkAAAAABgAAAAAAAAAAAAAABkNvbmZpZwAAAAAAAAAAAAAAAAAMUm91bmRDb3VudGVyAAAAAQAAAAAAAAAFUm91bmQAAAAAAAABAAAABgAAAAEAAAAAAAAAClN0b3JhZ2VSZWYAAAAAAAEAAAAGAAAAAQAAAAAAAAAFU3RhdGUAAAAAAAACAAAABgAAABMAAAABAAAAAAAAAARTZWFsAAAAAgAAAAYAAAAT",
         "AAAAAQAAAJBQZXItYmlkIGR1cmFibGUgc3RhdGUgKFBlcnNpc3RlbnQpLiBIb2xkcyBldmVyeXRoaW5nIHJlcXVpcmVkIHRvIGNsZWFyIGFuZApzZXR0bGUgLyByZWZ1bmQgc2FmZWx5LCBldmVuIGlmIHRoZSBlcGhlbWVyYWwgY2lwaGVydGV4dCBoYXMgZXhwaXJlZC4AAAAAAAAACEJpZFN0YXRlAAAABQAAADtIID0gc2hhMjU2KGJlMTYodmFsdWUpIOKAliBub25jZSkg4oCUIGJpbmRzIHRoZSBzZWFsZWQgYmlkLgAAAAAKY29tbWl0bWVudAAAAAAD7gAAACAAAABDUHVibGljIFVTREMgYnVkZ2V0IGxvY2tlZCBhdCBjb21taXQ7IHVwcGVyIGJvdW5kIG9uIHRoZSBzZWFsZWQgYmlkLgAAAAAGZXNjcm93AAAAAAALAAAAAAAAAA5yZXZlYWxlZF92YWx1ZQAAAAAD6AAAAAsAAAAAAAAAB3NldHRsZWQAAAAAAQAAAAAAAAAFdmFsaWQAAAAAAAAB",
+        "AAAAAQAAANVQZXItcm91bmQgcmVmZXJlbmNlIHRvIGVuY3J5cHRlZCBoZWF2eSBkYXRhIHN0b3JlZCB0aHJvdWdoIEJvc3Bob3IvV2FscnVzLgoKU3RlbGxhci9Tb3JvYmFuIHJlbWFpbnMgdGhlIGZhaXJuZXNzLCByZXZlYWwsIGFuZCBzZXR0bGVtZW50IGxheWVyOyB0aGlzCnJlY29yZCBvbmx5IGJpbmRzIHRoZSByb3VuZCB0byBhcHBsaWNhdGlvbi1sYXllciBzdG9yYWdlIHByb29mcy4AAAAAAAAAAAAAClN0b3JhZ2VSZWYAAAAAAAYAAAAAAAAAB2Jsb2JfaWQAAAAAEAAAAAAAAAAPY29tbWl0bWVudF9oYXNoAAAAA+4AAAAgAAAAAAAAAAxjb250ZW50X2hhc2gAAAPuAAAAIAAAAAAAAAAJZW5kX2Vwb2NoAAAAAAAABgAAAAAAAAAJaW50ZW50X2lkAAAAAAAAEAAAAAAAAAAQc3RvcmFnZV9wcm92aWRlcgAAABA=",
         "AAAAAgAAAGtEZXRlcm1pbmlzdGljIGNsZWFyaW5nIHJ1bGUuIERlZmF1bHQgaXMgYSBmaXJzdC1wcmljZSBzZWFsZWQtYmlkIGF1Y3Rpb24KKGhpZ2hlc3QgdmFsaWQgcmV2ZWFsZWQgYmlkIHdpbnMpLgAAAAAAAAAADENsZWFyaW5nUnVsZQAAAAIAAAAAAAAAAAAAAApIaWdoZXN0QmlkAAAAAAAAAAAAAAAAAAlMb3dlc3RCaWQAAAA=",
         "AAAAAQAAAaRDb250cmFjdC1nbG9iYWwgY29uZmlndXJhdGlvbiwgc2V0IG9uY2UgYXQgZGVwbG95IGluIEluc3RhbmNlIHN0b3JhZ2UuCgpBbGwgRHJhbmQgcGFyYW1ldGVycyBhcmUgc3VwcGxpZWQgYXQgZGVwbG95IHRpbWUgKHZhbGlkYXRlZCBhZ2FpbnN0IGEgbGl2ZQpxdWlja25ldCByb3VuZCBiZWZvcmUgZGVwbG95KSBzbyB0aGUgc291cmNlIGNhcnJpZXMgbm8gZ3Vlc3NlZCBjb25zdGFudHMuCmBkcmFuZF9wdWJrZXlgIGFuZCBgZzJfbmVnX2dlbmVyYXRvcmAgYXJlIHVuY29tcHJlc3NlZCBCTFMxMi0zODEgRzIgcG9pbnRzCigxOTIgYnl0ZXMgZWFjaCkgaW4gU29yb2JhbiBob3N0IHNlcmlhbGl6YXRpb24uIGBkc3RgIGlzIHRoZSBSRkMgOTM4MApkb21haW4gc2VwYXJhdGlvbiB0YWcgZm9yIHRoZSBjb25maWd1cmVkIERyYW5kIHNjaGVtZS4AAAAAAAAADEdsb2JhbENvbmZpZwAAAAYAAAAAAAAADWRyYW5kX2dlbmVzaXMAAAAAAAAGAAAAAAAAAAxkcmFuZF9wZXJpb2QAAAAGAAAAAAAAAAxkcmFuZF9wdWJrZXkAAAPuAAAAwAAAAAAAAAADZHN0AAAAAA4AAAAAAAAAEGcyX25lZ19nZW5lcmF0b3IAAAPuAAAAwAAAAAAAAAAEdXNkYwAAABM=" ]),
       options
@@ -495,6 +352,8 @@ export class Client extends ContractClient {
         get_bidders: this.txFromJSON<Result<Array<string>>>,
         open_reveal: this.txFromJSON<Result<void>>,
         create_round: this.txFromJSON<Result<u64>>,
-        get_bid_state: this.txFromJSON<Result<BidState>>
+        get_bid_state: this.txFromJSON<Result<BidState>>,
+        get_storage_ref: this.txFromJSON<Result<StorageRef>>,
+        attach_storage_ref: this.txFromJSON<Result<void>>
   }
 }

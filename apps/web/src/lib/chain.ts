@@ -20,7 +20,7 @@ export const DEFAULT_ROUND_ID = import.meta.env.VITE_ROUND_ID
 /** Seconds between commit deadline and Drand round R (the “Wait for Drand R” UI phase). */
 export const LIVE_COMMIT_CLOSE_BEFORE_REVEAL_SECONDS = 10;
 /** Default commit window when createRound is called without a preset. */
-export const LIVE_COMMIT_WINDOW_SECONDS = 27;
+export const LIVE_COMMIT_WINDOW_SECONDS = 50;
 /** Default seconds from round creation until Drand R (~commit window + wait above). */
 export const LIVE_REVEAL_IN_SECONDS =
   LIVE_COMMIT_WINDOW_SECONDS + LIVE_COMMIT_CLOSE_BEFORE_REVEAL_SECONDS;
@@ -32,13 +32,13 @@ export const LIVE_REVEAL_WINDOW_AFTER_REVEAL_SECONDS = 240;
  * later, so a 120s window means ~130s until Drand R publishes.
  */
 export const COMMIT_DURATION_PRESETS: Array<{ seconds: number; label: string; helper: string }> = [
-  { seconds: 27, label: "27s", helper: "solo demo" },
+  { seconds: 50, label: "50s", helper: "solo demo" },
   { seconds: 60, label: "1 min", helper: "quick paired" },
   { seconds: 120, label: "2 min", helper: "paired demo" },
   { seconds: 300, label: "5 min", helper: "public test" },
 ];
 
-export const DEFAULT_COMMIT_DURATION_SECONDS = 27;
+export const DEFAULT_COMMIT_DURATION_SECONDS = 50;
 
 export function freighterError(result: { error?: unknown }) {
   if (!result.error) return null;

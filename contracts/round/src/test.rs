@@ -6,7 +6,7 @@ use soroban_sdk::{
 };
 
 use crate::drand;
-use crate::types::{ClearingRule, GlobalConfig, Status};
+use crate::types::{ClearingRule, Error, GlobalConfig, Status};
 use crate::{SubRosaRound, SubRosaRoundClient};
 
 // Test timing uses genesis=0, period=1 so time(R) == R, keeping the deadline
@@ -88,6 +88,76 @@ fn create_round_happy_path() {
     assert_eq!(round.operator, operator);
     assert_eq!(round.reveal_round, 2_000);
     assert_eq!(round.bidders.len(), 0);
+}
+
+#[test]
+fn attach_storage_ref_binds_walrus_receipt_to_round() {
+    let f = setup();
+    let operator = Address::generate(&f.env);
+    let id = open_round(&f, &operator);
+    let content_hash = b32(&f.env, 2);
+    let commitment_hash = b32(&f.env, 3);
+    let intent_id = soroban_sdk::String::from_str(&f.env, "0x040404");
+    let blob_id = soroban_sdk::String::from_str(&f.env, "walrus-blob-1");
+
+    f.client.attach_storage_ref(
+        &id,
+        &operator,
+        &content_hash,
+        &commitment_hash,
+        &soroban_sdk::String::from_str(&f.env, "bosphor-walrus"),
+        &intent_id,
+        &blob_id,
+        &77,
+    );
+
+    let storage_ref = f.client.get_storage_ref(&id);
+    assert_eq!(storage_ref.content_hash, content_hash);
+    assert_eq!(storage_ref.commitment_hash, commitment_hash);
+    assert_eq!(storage_ref.intent_id, intent_id);
+    assert_eq!(storage_ref.blob_id, blob_id);
+    assert_eq!(storage_ref.end_epoch, 77);
+}
+
+#[test]
+fn attach_storage_ref_rejects_non_operator_and_duplicates() {
+    let f = setup();
+    let operator = Address::generate(&f.env);
+    let stranger = Address::generate(&f.env);
+    let id = open_round(&f, &operator);
+    let res = f.client.try_attach_storage_ref(
+        &id,
+        &stranger,
+        &b32(&f.env, 2),
+        &b32(&f.env, 3),
+        &soroban_sdk::String::from_str(&f.env, "bosphor-walrus"),
+        &soroban_sdk::String::from_str(&f.env, "0x040404"),
+        &soroban_sdk::String::from_str(&f.env, "walrus-blob-1"),
+        &77,
+    );
+    assert_eq!(res, Err(Ok(Error::NotRoundOperator)));
+
+    f.client.attach_storage_ref(
+        &id,
+        &operator,
+        &b32(&f.env, 2),
+        &b32(&f.env, 3),
+        &soroban_sdk::String::from_str(&f.env, "bosphor-walrus"),
+        &soroban_sdk::String::from_str(&f.env, "0x040404"),
+        &soroban_sdk::String::from_str(&f.env, "walrus-blob-1"),
+        &77,
+    );
+    let duplicate = f.client.try_attach_storage_ref(
+        &id,
+        &operator,
+        &b32(&f.env, 6),
+        &b32(&f.env, 7),
+        &soroban_sdk::String::from_str(&f.env, "bosphor-walrus"),
+        &soroban_sdk::String::from_str(&f.env, "0x080808"),
+        &soroban_sdk::String::from_str(&f.env, "walrus-blob-2"),
+        &88,
+    );
+    assert_eq!(duplicate, Err(Ok(Error::StorageRefAlreadyAttached)));
 }
 
 #[test]

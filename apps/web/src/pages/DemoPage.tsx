@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { AnimatePresence, motion } from "framer-motion";
+import { useAccount, useChainId, usePublicClient, useSwitchChain, useWalletClient } from "wagmi";
 import { AgentActivity, KeeperPanel, X402Logs } from "../components/AgentPanels";
 import { AttackDemo } from "../components/AttackDemo";
 import { AuditorView } from "../components/AuditorView";
@@ -23,29 +25,48 @@ import {
   toDemoEscrowAmount,
 } from "../lib/chain";
 import { formatCountdown, useDrandCountdown } from "../hooks/useDrandCountdown";
+import type { StorageReceipt } from "../lib/storageTypes";
+import { getStorageConfigStatus } from "../lib/walrusStorage";
 import { useRoundSession, type ActionStatus } from "../hooks/useRoundSession";
 import { shortAddr } from "../lib/format";
 import { LOGO_SRC } from "../lib/chain";
 import { ConfettiBurst } from "../ui/Confetti";
 import { CountUp } from "../ui/CountUp";
+import { BOSPHOR_CHAIN } from "../wallet/EvmWalletProvider";
 
 type DemoMode = "live" | "evidence";
 
+type EvmRoundWalletState = {
+  connected: boolean;
+  address?: string;
+  chainId?: number;
+  wrongChain: boolean;
+  switchToBosphorChain: () => void;
+};
+
+type ActiveWalletRoute = "stellar-walrus" | "bosphor-walrus";
+
+function routeName(route: ActiveWalletRoute) {
+  return route === "stellar-walrus" ? "Stellar" : "EVM";
+}
+
 function FlowSteps({
   address,
+  accountLabel,
   roundId,
   committed,
   revealed,
   working,
 }: {
   address: string | null;
+  accountLabel: string | null;
   roundId: bigint | null;
   committed: boolean;
   revealed: boolean;
   working: boolean;
 }) {
   const steps = [
-    { label: "Wallet", detail: address ? shortAddr(address, 6) : "connect", done: Boolean(address) },
+    { label: "Wallet", detail: accountLabel ?? "connect", done: Boolean(address) },
     { label: "Round", detail: roundId == null ? "create" : `#${roundId}`, done: roundId != null },
     { label: "Seal", detail: committed ? "on-chain" : "commit", done: committed },
     { label: "Reveal", detail: revealed ? "opened" : "after R", done: revealed },
@@ -94,6 +115,10 @@ function PhaseGuide(props: {
   commitEntry: () => void;
   openAndReveal: () => void;
   suggestedRoundId: bigint | null;
+  storageConfigured: boolean;
+  storageMissing: string[];
+  evm: EvmRoundWalletState;
+  walletRoute: ActiveWalletRoute;
 }) {
   const {
     useCase,
@@ -114,6 +139,10 @@ function PhaseGuide(props: {
     commitEntry,
     openAndReveal,
     suggestedRoundId,
+    storageConfigured,
+    storageMissing,
+    evm,
+    walletRoute,
   } = props;
   const [joinId, setJoinId] = useState("");
   const [duration, setDuration] = useState<number>(DEFAULT_COMMIT_DURATION_SECONDS);
@@ -146,7 +175,16 @@ function PhaseGuide(props: {
   let showInput = false;
   let showJoin = false;
 
-  if (address && !canUseContract) {
+  if (!address && walletRoute === "bosphor-walrus" && evm.connected) {
+    tone = "ready";
+    eyebrow = "Storage route";
+    title = "Bosphor → Walrus connected";
+    detail =
+      "Encrypted metadata can be stored through Bosphor with this EVM wallet. Stellar round creation still needs Freighter because Rainbow cannot sign Soroban transactions.";
+    timerValue = evm.wrongChain ? "wrong chain" : BOSPHOR_CHAIN.name;
+    ctaLabel = evm.wrongChain ? "Switch EVM chain" : "Connect Freighter for rounds";
+    cta = evm.wrongChain ? evm.switchToBosphorChain : connect;
+  } else if (address && !canUseContract) {
     tone = "danger";
     eyebrow = "Setup";
     title = "Contract not configured";
@@ -158,11 +196,29 @@ function PhaseGuide(props: {
     tone = "ready";
     eyebrow = "Step 1 · sealed round";
     title = "Create a round";
-    detail = `Pick a commit window length, then create. Anyone with the round id can join and seal their own entry before the window closes.`;
+    detail =
+      "Pick a commit window length. The encrypted Sub Rosa round metadata is stored through Bosphor → Walrus before the Stellar round is created.";
     timerValue = `~${formatDurationLabel(duration)} window`;
     ctaLabel = `Create · ${formatDurationLabel(duration)}`;
     cta = () => createRound(duration);
     showJoin = true;
+    if (!storageConfigured) {
+      tone = "danger";
+      eyebrow = "Storage setup";
+      title = walletRoute === "stellar-walrus" ? "Walrus storage not configured" : "Bosphor storage not configured";
+      detail = `Add the missing env vars before creating a Walrus-backed round: ${storageMissing.join(", ")}.`;
+      timerValue = "env";
+      ctaLabel = "Missing Bosphor env";
+      ctaDisabled = true;
+    } else if (walletRoute === "bosphor-walrus" && evm.wrongChain) {
+      tone = "danger";
+      eyebrow = "Storage chain";
+      title = "Switch to the Bosphor deployment chain";
+      detail = `This demo stores encrypted data through Bosphor on ${BOSPHOR_CHAIN.name}.`;
+      timerValue = String(BOSPHOR_CHAIN.id);
+      ctaLabel = "Switch EVM chain";
+      cta = evm.switchToBosphorChain;
+    }
   } else if (roundId != null && !committed && !commitClosed) {
     // Danger threshold scales with the window: ~25% of remaining time, min 4s, max 12s.
     const dangerThreshold = Math.max(4, Math.min(12, Math.round(duration * 0.25)));
@@ -474,11 +530,13 @@ function FeedbackPanel({
   latest,
   roundId,
   commitValue,
+  storageReceipt,
 }: {
   status: ActionStatus;
   latest: string | null;
   roundId: bigint | null;
   commitValue: bigint | null;
+  storageReceipt: StorageReceipt | null;
 }) {
   const headline =
     status === "working"
@@ -529,6 +587,14 @@ function FeedbackPanel({
           <small>sealed escrow</small>
           <b>{escrowLabel}</b>
         </div>
+        <div>
+          <small>storage</small>
+          <b>{storageReceipt ? "Bosphor → Walrus" : "—"}</b>
+        </div>
+        <div>
+          <small>blob</small>
+          <b>{storageReceipt ? shortAddr(storageReceipt.walrusBlobId, 6) : "—"}</b>
+        </div>
       </div>
     </motion.section>
   );
@@ -537,10 +603,16 @@ function FeedbackPanel({
 function LivePanel({
   active,
   session,
+  evm,
+  walletRoute,
+  setWalletRoute,
   onCelebrate,
 }: {
   active: UseCase;
   session: ReturnType<typeof useRoundSession>;
+  evm: EvmRoundWalletState;
+  walletRoute: ActiveWalletRoute;
+  setWalletRoute: (route: ActiveWalletRoute) => void;
   onCelebrate: () => void;
 }) {
   const {
@@ -562,6 +634,7 @@ function LivePanel({
     live,
     log,
     revealProgress,
+    storageReceipt,
     connect,
     createRound,
     joinRound,
@@ -601,6 +674,10 @@ function LivePanel({
         };
       });
   }, [live, address]);
+  const activeAccount = walletRoute === "stellar-walrus" ? address : evm.address ?? null;
+  const accountLabel = activeAccount ? shortAddr(activeAccount, 6) : null;
+  const routeLabel = walletRoute === "stellar-walrus" ? "Freighter + Walrus" : "RainbowKit + Bosphor → Walrus";
+  const storageConfig = getStorageConfigStatus(walletRoute);
 
   return (
     <>
@@ -617,19 +694,74 @@ function LivePanel({
         </div>
       </section>
 
-      <section className={`wallet-bar ${address ? "connected" : ""}`}>
+      <section className={`wallet-bar ${activeAccount ? "connected" : ""}`}>
         <div>
-          <span>Wallet</span>
-          <strong>{address ? shortAddr(address, 6) : "Not connected"}</strong>
-          <p>{walletStatus}</p>
+          <span>Active wallet</span>
+          <strong>{accountLabel ?? "Not connected"}</strong>
+          <p>
+            {activeAccount
+              ? `${routeLabel} · Storage ${storageConfig.ok ? "configured" : "needs setup"}`
+              : `${routeName(walletRoute)} route selected · connect its wallet to continue.`}
+          </p>
         </div>
-        <button type="button" className="primary-action" onClick={() => void connect()}>
-          {address ? "Reconnect" : "Connect Freighter"}
-        </button>
+        <div className="wallet-actions">
+          <div className="route-toggle" role="tablist" aria-label="Active wallet route">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={walletRoute === "stellar-walrus"}
+              className={walletRoute === "stellar-walrus" ? "active" : ""}
+              onClick={() => setWalletRoute("stellar-walrus")}
+            >
+              Stellar
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={walletRoute === "bosphor-walrus"}
+              className={walletRoute === "bosphor-walrus" ? "active" : ""}
+              onClick={() => setWalletRoute("bosphor-walrus")}
+            >
+              EVM
+            </button>
+          </div>
+          <button type="button" className="primary-action" onClick={() => void connect()}>
+            {address ? "Reconnect Freighter" : "Connect Freighter"}
+          </button>
+          <ConnectButton.Custom>
+            {({ account, chain, mounted, openAccountModal, openChainModal, openConnectModal }) => {
+              const ready = mounted;
+              if (!ready || !account) {
+                return (
+                  <button type="button" className="secondary-action" onClick={openConnectModal}>
+                    EVM route
+                  </button>
+                );
+              }
+              if (chain?.unsupported || evm.wrongChain) {
+                return (
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={chain?.unsupported ? openChainModal : evm.switchToBosphorChain}
+                  >
+                    Switch EVM
+                  </button>
+                );
+              }
+              return (
+                <button type="button" className="secondary-action" onClick={openAccountModal}>
+                  {account.displayName}
+                </button>
+              );
+            }}
+          </ConnectButton.Custom>
+        </div>
       </section>
 
       <FlowSteps
-        address={address}
+        address={activeAccount}
+        accountLabel={accountLabel}
         roundId={roundId}
         committed={committed}
         revealed={revealedCount > 0}
@@ -655,6 +787,10 @@ function LivePanel({
         suggestedRoundId={DEFAULT_ROUND_ID}
         commitEntry={() => void commitEntry()}
         openAndReveal={() => void openAndReveal()}
+        storageConfigured={getStorageConfigStatus().ok}
+        storageMissing={getStorageConfigStatus(walletRoute).missing}
+        evm={evm}
+        walletRoute={walletRoute}
       />
 
       {revealProgress ? (
@@ -687,6 +823,7 @@ function LivePanel({
           latest={log[0] ?? null}
           roundId={roundId}
           commitValue={commitValue}
+          storageReceipt={storageReceipt}
         />
       </div>
 
@@ -835,7 +972,39 @@ export function DemoPage({
 }) {
   const [mode, setMode] = useState<DemoMode>("live");
   const [confettiTick, setConfettiTick] = useState(0);
-  const session = useRoundSession(active);
+  const evmAccount = useAccount();
+  const evmChainId = useChainId();
+  const evmWalletClient = useWalletClient();
+  const evmPublicClient = usePublicClient({ chainId: BOSPHOR_CHAIN.id });
+  const { switchChain } = useSwitchChain();
+  const evmWrongChain = evmAccount.isConnected && evmChainId !== BOSPHOR_CHAIN.id;
+  const [walletRoute, setWalletRoute] = useState<ActiveWalletRoute>("stellar-walrus");
+  const session = useRoundSession(active, {
+    activeRoute: walletRoute,
+    evm: {
+      address: evmAccount.address,
+      chainId: evmChainId,
+      walletClient: evmWalletClient.data,
+      publicClient: evmPublicClient,
+      wrongChain: evmWrongChain,
+      connected: evmAccount.isConnected,
+    },
+  });
+  useEffect(() => {
+    if (!session.address && evmAccount.isConnected && !evmWrongChain) {
+      setWalletRoute((route) => (route === "stellar-walrus" ? "bosphor-walrus" : route));
+    }
+  }, [session.address, evmAccount.isConnected, evmWrongChain]);
+  const evmWallet = useMemo<EvmRoundWalletState>(
+    () => ({
+      connected: evmAccount.isConnected,
+      address: evmAccount.address,
+      chainId: evmChainId,
+      wrongChain: evmWrongChain,
+      switchToBosphorChain: () => switchChain({ chainId: BOSPHOR_CHAIN.id }),
+    }),
+    [evmAccount.address, evmAccount.isConnected, evmChainId, evmWrongChain, switchChain],
+  );
   const sidebarDrand =
     mode === "evidence"
       ? { mode: "proof" as const, targetRound: DEMO_TRACE.meta.revealRound }
@@ -911,6 +1080,9 @@ export function DemoPage({
               <LivePanel
                 active={active}
                 session={session}
+                evm={evmWallet}
+                walletRoute={walletRoute}
+                setWalletRoute={setWalletRoute}
                 onCelebrate={() => setConfettiTick((t) => t + 1)}
               />
             ) : (

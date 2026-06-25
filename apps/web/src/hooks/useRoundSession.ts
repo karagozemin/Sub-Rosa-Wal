@@ -35,8 +35,24 @@ import {
 import { DEMO_TRACE } from "../demo/trace";
 import { formatCountdown, useDrandCountdown } from "./useDrandCountdown";
 import { useToast } from "../ui/Toast";
+import { submitBosphorIntent } from "../lib/bosphorIntent";
+import type { StorageReceipt } from "../lib/storageTypes";
+import {
+  createCommitmentHash,
+  encryptForDemo,
+  getStorageConfigStatus,
+  storeDirectWalrusPayload,
+  type StorageRoute,
+} from "../lib/walrusStorage";
+import type { Hex, PublicClient, WalletClient } from "viem";
 
 export type ActionStatus = "idle" | "working" | "ok" | "error";
+
+const LEGACY_STORAGE_REF_MISSING_CONTRACTS = new Set([
+  "CC2QMOXZERI6UOR67YKSORT7QTUHQ5QUGMHQBYVP23YM3NMUNNOEOGZY",
+  "CAPTODBCDEVIK23ALBJBS2TXRTIK47ZA5MBTHYF4XLHG2BK7JPYUCU2Y",
+  "CA7KSDEYJEPGZEB2ZROTLUWKQQ6GIRIQNGG6Z745MZ34QHP4UJPWODEX",
+]);
 
 export interface LiveRound {
   round: Round;
@@ -54,6 +70,7 @@ export interface CaseSession {
   roundCreatedAt: number | null;
   live: LiveRound | null;
   log: string[];
+  storageReceipt: StorageReceipt | null;
 }
 
 function emptySession(roundId: bigint | null = null): CaseSession {
@@ -65,6 +82,7 @@ function emptySession(roundId: bigint | null = null): CaseSession {
     roundCreatedAt: null,
     live: null,
     log: [],
+    storageReceipt: null,
   };
 }
 
@@ -77,7 +95,28 @@ function initialSessions(): Record<UseCaseId, CaseSession> {
   };
 }
 
-export function useRoundSession(active: UseCase) {
+function hexToBuffer(hex: string): Buffer {
+  const normalized = hex.startsWith("0x") ? hex.slice(2) : hex;
+  if (normalized.length !== 64) {
+    throw new Error("Expected a 32-byte hex value for storage reference attachment.");
+  }
+  return Buffer.from(normalized, "hex");
+}
+
+export function useRoundSession(
+  active: UseCase,
+  route?: {
+    activeRoute: StorageRoute;
+    evm?: {
+      address?: Hex;
+      chainId?: number;
+      walletClient?: WalletClient;
+      publicClient?: PublicClient;
+      wrongChain?: boolean;
+      connected?: boolean;
+    };
+  },
+) {
   const toast = useToast();
   const [address, setAddress] = useState<string | null>(null);
   const [walletStatus, setWalletStatus] = useState("Connect a funded Stellar testnet wallet.");
@@ -91,7 +130,7 @@ export function useRoundSession(active: UseCase) {
   );
   const contract = useWalletContract(address);
   const session = sessions[active.id];
-  const { auditorPublicKey, commitValue, sealedCiphertext, live, log, roundId, roundCreatedAt } =
+  const { auditorPublicKey, commitValue, sealedCiphertext, live, log, roundId, roundCreatedAt, storageReceipt } =
     session;
   const canUseContract = Boolean(CONTRACT_ID && contract);
   const targetRound = live ? Number(live.round.reveal_round) : DEMO_TRACE.meta.revealRound;
@@ -105,6 +144,8 @@ export function useRoundSession(active: UseCase) {
   const revealedCount = live
     ? Object.values(live.bidStates).filter((state) => state.revealed_value != null).length
     : 0;
+  const activeRoute = route?.activeRoute ?? "stellar-walrus";
+  const evm = route?.evm;
 
   useEffect(() => {
     setEntryValue(active.defaultValue);
@@ -175,7 +216,34 @@ export function useRoundSession(active: UseCase) {
       toast.push("error", "Contract not configured", "Set VITE_CONTRACT_ID in apps/web/.env.local");
       return;
     }
+    if (LEGACY_STORAGE_REF_MISSING_CONTRACTS.has(CONTRACT_ID)) {
+      toast.push(
+        "error",
+        "Contract needs redeploy",
+        "The configured Soroban contract does not expose attach_storage_ref. Deploy the current WASM and update VITE_CONTRACT_ID before creating Walrus-backed rounds.",
+      );
+      return;
+    }
     if (!contract || !address) return;
+    const storageConfig = getStorageConfigStatus(activeRoute);
+    if (!storageConfig.ok) {
+      toast.push(
+        "error",
+        activeRoute === "stellar-walrus" ? "Walrus storage not configured" : "Bosphor storage not configured",
+        storageConfig.missing.join(", "),
+      );
+      return;
+    }
+    if (activeRoute === "bosphor-walrus") {
+      if (!evm?.connected || !evm.address || !evm.walletClient || !evm.publicClient) {
+        toast.push("error", "Connect EVM wallet", "RainbowKit signs the Bosphor → Walrus storage intent.");
+        return;
+      }
+      if (evm.wrongChain) {
+        toast.push("error", "Wrong EVM chain", "Switch to the configured Bosphor deployment chain.");
+        return;
+      }
+    }
     const id = active.id;
     const workingId = toast.push(
       "working",
@@ -193,6 +261,55 @@ export function useRoundSession(active: UseCase) {
       const revealDeadline = tReveal + LIVE_REVEAL_WINDOW_AFTER_REVEAL_SECONDS;
       const auditor = generateAuditorKeypair();
       const itemRef = await sha256Bytes(`${active.id}:${address}:${Date.now()}`);
+      const storagePlaintext = {
+        useCase: active.id,
+        actorRole: active.actorRole,
+        submitter: address,
+        storageRoute: activeRoute,
+        itemRef: Buffer.from(itemRef).toString("hex"),
+        revealRound,
+        commitDeadline,
+        revealDeadline,
+        createdAt: new Date().toISOString(),
+      };
+      const encrypted = await encryptForDemo(storagePlaintext);
+      const commitmentHash = await createCommitmentHash({
+        roundId: `pending:${active.id}:${Date.now()}`,
+        submitter: address,
+        contentHash: encrypted.contentHash,
+      });
+      const storagePayload = {
+        protocol: "sub-rosa-round-storage-v1" as const,
+        useCase: active.id,
+        submitter: address,
+        itemRef: Buffer.from(itemRef).toString("hex"),
+        revealRound: String(revealRound),
+        commitDeadline: String(commitDeadline),
+        revealDeadline: String(revealDeadline),
+        contentHash: encrypted.contentHash,
+        commitmentHash,
+        encryptedPayload: encrypted.encryptedPayload,
+      };
+      toast.push(
+        "working",
+        "Storing sealed metadata on Walrus…",
+        activeRoute === "bosphor-walrus"
+          ? "Sign the Bosphor EVM storage intent."
+          : "Publishing encrypted metadata to the configured Walrus publisher.",
+      );
+      const storageReceipt: StorageReceipt =
+        activeRoute === "bosphor-walrus"
+          ? await submitBosphorIntent({
+              walletClient: evm!.walletClient!,
+              publicClient: evm!.publicClient!,
+              account: evm!.address!,
+              input: storagePayload,
+            })
+          : await storeDirectWalrusPayload({
+              payload: storagePayload,
+              contentHash: encrypted.contentHash,
+            });
+      push(`Walrus storage proof received · ${storageReceipt.walrusBlobId.slice(0, 10)}…`, id);
       const tx = await contract.create_round({
         operator: address,
         item_ref: Buffer.from(itemRef),
@@ -204,6 +321,17 @@ export function useRoundSession(active: UseCase) {
       });
       const sent = await tx.signAndSend();
       const nextRoundId = sent.result.unwrap() as bigint;
+      const attachTx = await contract.attach_storage_ref({
+        round_id: nextRoundId,
+        operator: address,
+        content_hash: hexToBuffer(encrypted.contentHash),
+        commitment_hash: hexToBuffer(commitmentHash),
+        storage_provider: storageReceipt.storageProvider,
+        intent_id: storageReceipt.intentId,
+        blob_id: storageReceipt.walrusBlobId,
+        end_epoch: BigInt(storageReceipt.endEpoch || 0),
+      });
+      await attachTx.signAndSend();
       updateSession(id, {
         roundId: nextRoundId,
         auditorPublicKey: auditor.publicKey,
@@ -211,9 +339,10 @@ export function useRoundSession(active: UseCase) {
         commitValue: null,
         sealedCiphertext: null,
         live: null,
+        storageReceipt,
       });
       setStatus("ok");
-      const msg = `Round #${nextRoundId} · commit window ~${commitWindowSeconds}s · R=${revealRound}`;
+      const msg = `Round #${nextRoundId} · Walrus proof attached on Stellar · R=${revealRound}`;
       push(msg, id);
       toast.dismiss(workingId);
       toast.push("success", "Round created on Stellar", msg);
@@ -461,6 +590,7 @@ export function useRoundSession(active: UseCase) {
     live,
     log,
     revealProgress,
+    storageReceipt,
     connect,
     createRound,
     joinRound,

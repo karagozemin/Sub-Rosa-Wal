@@ -47,6 +47,7 @@ export function LandingPage({
         <div className="landing-nav-actions">
           <span className="landing-status-pill winner">Hack Privacy #1</span>
           <span className="landing-status-pill">testnet · live</span>
+          <a href="#/storage">Walrus layer</a>
           <a href="https://github.com/karagozemin/Sub-Rosa" target="_blank" rel="noreferrer">
             GitHub
           </a>
@@ -94,6 +95,9 @@ export function LandingPage({
             </button>
             <a className="secondary-action" href="#/architecture">
               Read the architecture
+            </a>
+            <a className="secondary-action" href="#/storage">
+              Open Walrus storage layer
             </a>
           </motion.div>
 

@@ -1,6 +1,6 @@
 use soroban_sdk::{Address, Env};
 
-use crate::types::{BidState, DataKey, Error, GlobalConfig, Round, Seal};
+use crate::types::{BidState, DataKey, Error, GlobalConfig, Round, Seal, StorageRef};
 
 // TTL policy. Ledger close time on Stellar is ~5s, so these are generous for a
 // hackathon-scale round while keeping ephemeral seal data short-lived.
@@ -58,6 +58,33 @@ pub fn get_round(env: &Env, round_id: u64) -> Result<Round, Error> {
 pub fn set_round(env: &Env, round_id: u64, round: &Round) {
     let key = DataKey::Round(round_id);
     env.storage().persistent().set(&key, round);
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_THRESHOLD, PERSISTENT_BUMP);
+}
+
+pub fn has_storage_ref(env: &Env, round_id: u64) -> bool {
+    env.storage()
+        .persistent()
+        .has(&DataKey::StorageRef(round_id))
+}
+
+pub fn get_storage_ref(env: &Env, round_id: u64) -> Result<StorageRef, Error> {
+    let key = DataKey::StorageRef(round_id);
+    let storage_ref: StorageRef = env
+        .storage()
+        .persistent()
+        .get(&key)
+        .ok_or(Error::StorageRefNotFound)?;
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_THRESHOLD, PERSISTENT_BUMP);
+    Ok(storage_ref)
+}
+
+pub fn set_storage_ref(env: &Env, round_id: u64, storage_ref: &StorageRef) {
+    let key = DataKey::StorageRef(round_id);
+    env.storage().persistent().set(&key, storage_ref);
     env.storage()
         .persistent()
         .extend_ttl(&key, PERSISTENT_THRESHOLD, PERSISTENT_BUMP);

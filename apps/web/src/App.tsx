@@ -5,6 +5,7 @@ import { hashFor, routeFromHash, type RouteState } from "./config/routing";
 import { ArchitecturePage } from "./pages/ArchitecturePage";
 import { DemoPage } from "./pages/DemoPage";
 import { LandingPage } from "./pages/LandingPage";
+import { StorageLayerPage } from "./pages/StorageLayerPage";
 import { ToastProvider } from "./ui/Toast";
 
 export default function App() {
@@ -32,6 +33,8 @@ export default function App() {
         />
       ) : route.page === "architecture" ? (
         <ArchitecturePage goHome={() => navigate("landing")} />
+      ) : route.page === "storage" ? (
+        <StorageLayerPage goHome={() => navigate("landing")} goDemo={() => navigate("demo", "grants")} />
       ) : (
         <DemoPage
           active={active}

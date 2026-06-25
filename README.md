@@ -136,6 +136,36 @@ trust path entirely:
 
 See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for the system map, lifecycle, trust boundaries, and monorepo layout.
 
+## Bosphor / Walrus storage layer
+
+The live UI keeps the original Sub Rosa flow and uses one active wallet route
+at a time:
+
+- **Freighter / Stellar wallet:** signs Soroban round creation, commit, reveal,
+  clearing, settlement, and the compact storage proof reference. Before the
+  Soroban action, encrypted metadata is stored through the configured Walrus
+  publisher (`VITE_WALRUS_PUBLISHER_URL`).
+- **RainbowKit / EVM wallet:** signs only the Bosphor storage intent that routes
+  encrypted Sub Rosa metadata to Walrus. It does not replace Stellar/Soroban
+  for round, reveal, or settlement logic.
+
+The app does not treat localStorage as Walrus and does not generate fake
+Bosphor intent IDs or Walrus blob IDs. Before a new round is created, encrypted
+round metadata is stored on Walrus through the selected route. After the Stellar
+round exists, the operator attaches the returned storage proof to the round with:
+
+```text
+attach_storage_ref(round_id, operator, content_hash, commitment_hash,
+  storage_provider, intent_id, blob_id, end_epoch)
+```
+
+This keeps the separation explicit: Walrus stores encrypted heavy data through
+the application/Bosphor route, while Stellar/Soroban stores only the compact
+Sub Rosa proof reference and remains the fairness, reveal, and settlement
+layer. A deployed contract must include `attach_storage_ref` and
+`get_storage_ref`; older testnet contract IDs that only expose `create_round`
+cannot bind the Walrus receipt on-chain.
+
 ## Monorepo layout
 
 ```
@@ -153,7 +183,7 @@ docs/                   Design, threat model, track answers, deploy, limitations
 
 ```bash
 pnpm install
-pnpm contract:test          # 14 Rust tests
+pnpm contract:test          # Rust contract tests
 pnpm web:dev                # jury UI — works without .env
 pnpm agents:e2e             # testnet full agent proof (needs stellar keys)
 pnpm mainnet:verify         # mainnet read-only proof
@@ -177,7 +207,7 @@ pnpm mainnet:verify         # mainnet read-only proof
 
 ## Status (submission)
 
-- [x] Round contract + 14 tests + on-chain Drand BLS
+- [x] Round contract + storage proof reference + on-chain Drand BLS
 - [x] tlock + auditor blob (13 tests)
 - [x] SDK (7 tests) + optional OZ Relayer Channels submitter
 - [x] Testnet **full lifecycle** (`lifecycle:e2e`) — USDC, 2 bidders, settle → 0

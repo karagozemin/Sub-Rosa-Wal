@@ -15,7 +15,7 @@ mod storage;
 mod types;
 
 use soroban_sdk::{
-    contract, contractimpl, symbol_short, token, Address, Bytes, BytesN, Env, Vec,
+    contract, contractimpl, symbol_short, token, Address, Bytes, BytesN, Env, String, Vec,
 };
 
 use storage::*;
@@ -121,6 +121,48 @@ impl SubRosaRound {
             (operator, reveal_round, commit_deadline),
         );
         Ok(round_id)
+    }
+
+    /// Attach the Bosphor/Walrus storage reference for a round.
+    ///
+    /// The encrypted heavy payload lives outside Stellar. This record anchors
+    /// the compact proof fields needed to bind a Sub Rosa round to that storage
+    /// receipt without making Stellar call Bosphor or Walrus.
+    pub fn attach_storage_ref(
+        env: Env,
+        round_id: u64,
+        operator: Address,
+        content_hash: BytesN<32>,
+        commitment_hash: BytesN<32>,
+        storage_provider: String,
+        intent_id: String,
+        blob_id: String,
+        end_epoch: u64,
+    ) -> Result<(), Error> {
+        operator.require_auth();
+        let round = get_round(&env, round_id)?;
+        if round.operator != operator {
+            return Err(Error::NotRoundOperator);
+        }
+        if has_storage_ref(&env, round_id) {
+            return Err(Error::StorageRefAlreadyAttached);
+        }
+
+        let storage_ref = StorageRef {
+            content_hash,
+            commitment_hash,
+            storage_provider,
+            intent_id,
+            blob_id,
+            end_epoch,
+        };
+        set_storage_ref(&env, round_id, &storage_ref);
+
+        env.events().publish(
+            (symbol_short!("storeref"), round_id),
+            (operator, storage_ref.blob_id.clone(), storage_ref.intent_id.clone()),
+        );
+        Ok(())
     }
 
     /// Submit (or overwrite, before the deadline) a sealed bid and lock escrow.
@@ -413,6 +455,10 @@ impl SubRosaRound {
 
     pub fn get_round(env: Env, round_id: u64) -> Result<Round, Error> {
         storage::get_round(&env, round_id)
+    }
+
+    pub fn get_storage_ref(env: Env, round_id: u64) -> Result<StorageRef, Error> {
+        storage::get_storage_ref(&env, round_id)
     }
 
     pub fn get_bid_state(env: Env, round_id: u64, bidder: Address) -> Result<BidState, Error> {

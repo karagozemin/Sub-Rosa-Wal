@@ -1,4 +1,4 @@
-use soroban_sdk::{contracterror, contracttype, Address, Bytes, BytesN, Vec};
+use soroban_sdk::{contracterror, contracttype, Address, Bytes, BytesN, String, Vec};
 
 /// Contract error codes. Every failure state from the PRD has a defined code —
 /// there is no undefined behavior and no silent fallback.
@@ -34,6 +34,9 @@ pub enum Error {
     DeadlineInPast = 36,
     NoValidBids = 37,
     RoundFull = 38,
+    StorageRefAlreadyAttached = 39,
+    StorageRefNotFound = 40,
+    NotRoundOperator = 41,
 }
 
 /// Round lifecycle. Mirrors the state machine in PRD §6.
@@ -97,6 +100,21 @@ pub struct Round {
     pub winning_bid: i128,
 }
 
+/// Per-round reference to encrypted heavy data stored through Bosphor/Walrus.
+///
+/// Stellar/Soroban remains the fairness, reveal, and settlement layer; this
+/// record only binds the round to application-layer storage proofs.
+#[contracttype]
+#[derive(Clone)]
+pub struct StorageRef {
+    pub content_hash: BytesN<32>,
+    pub commitment_hash: BytesN<32>,
+    pub storage_provider: String,
+    pub intent_id: String,
+    pub blob_id: String,
+    pub end_epoch: u64,
+}
+
 /// Per-bid durable state (Persistent). Holds everything required to clear and
 /// settle / refund safely, even if the ephemeral ciphertext has expired.
 #[contracttype]
@@ -128,6 +146,7 @@ pub enum DataKey {
     Config,
     RoundCounter,
     Round(u64),
+    StorageRef(u64),
     State(u64, Address),
     Seal(u64, Address),
 }
