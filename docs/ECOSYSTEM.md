@@ -83,6 +83,8 @@ SAC. See `docs/TECH_DESIGN.md`.
 - npm: `@goatnetwork/agentkit`
 - Local package: `packages/goat`
 - API surface: `POST /goat/agent-decision`, protected by x402
+- Hosted demo surface: `POST /goat/paid-agent-decision`, a backend relay that
+  pays the protected route with a funded Stellar testnet demo payer
 
 GOAT AgentKit is treated as an agent runtime boundary, not as the settlement
 layer. Live GOAT tool execution requires credentials/faucet/API access; local

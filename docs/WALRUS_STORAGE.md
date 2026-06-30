@@ -87,6 +87,17 @@ transactions.
 8. Sealed scores and reveal metadata are submitted as additional Bosphor
    storage intents linked back to the round `intentId`.
 
+The EVM wallet pays two things in the same transaction:
+
+```text
+required ETH = Bosphor nativeFee value + estimated gas * gas price
+```
+
+`nativeFee` comes from `quote(...)` and is sent as `msg.value`; gas is the
+normal Sepolia transaction fee. If the active MetaMask account has ETH on a
+different network or a different account, the adapter submit can correctly fail
+with `insufficient funds for gas * price + value`.
+
 Receipt shape:
 
 ```ts

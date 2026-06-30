@@ -89,6 +89,9 @@ Deploy constants validated via `services/drand-tools` against live quicknet. Con
 
 - Request validation uses Zod schemas in `packages/goat`.
 - `POST /goat/agent-decision` is x402-gated before output is returned.
+- `POST /goat/paid-agent-decision` is a hosted-demo relay. It uses backend
+  `GOAT_DEMO_PAYER_SECRET` to pay the protected GOAT endpoint server-side, then
+  returns the real settlement receipt and decision to the browser.
 - Output includes `recommendedAction`, `bidAmount`, `confidence`,
   `riskNotes`, and a `commitmentPayload`.
 - `commitmentPayload.commitmentHash` is generated with the same Sub Rosa

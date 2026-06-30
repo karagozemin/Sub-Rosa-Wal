@@ -99,6 +99,15 @@ GOAT_DEMO_PAYER_SECRET=S...
 USDC trustline/balance for the backend's `PAYMENT_ASSET`. Do not use a
 production or valuable wallet secret for this public demo relay.
 
+On Vercel, keep the frontend public:
+
+```bash
+VITE_GOAT_AGENT_API_URL=https://your-appraisal-api.example
+```
+
+Do not set payer secrets in Vercel. The payer belongs on the backend runtime
+only.
+
 You can also keep secrets out of the browser and run a paid agent client from
 Node, following `services/appraisal-api/src/client.ts`.
 

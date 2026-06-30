@@ -72,7 +72,7 @@ The live app uses one active wallet route at a time:
 | --- | --- | --- | --- | --- |
 | **Stellar route** | Freighter | Soroban `create_round`, `attach_storage_ref`, commit, reveal, clear, settle | Numeric Soroban `round_id` | Stellar/Soroban |
 | **EVM route** | RainbowKit / MetaMask | Bosphor `submitIntent` calls for round metadata, sealed entry, and reveal metadata | Bosphor `intentId` for the round metadata intent | Storage-only demo route; Stellar settlement remains separate |
-| **GOAT agent route** | Backend agent session | x402-paid `POST /goat/agent-decision`, structured bid/evaluation output | Agent decision id / commitment hash | Feeds existing Sub Rosa commit flow |
+| **GOAT agent route** | Backend agent session | x402-paid `POST /goat/agent-decision`, structured bid/evaluation output; optional backend demo relay pays that route for the browser | Agent decision id / commitment hash | Feeds existing Sub Rosa commit flow |
 
 No runtime mock storage is used. The app does not treat `localStorage` as
 Walrus and does not generate fake Bosphor intent IDs, fake Walrus blob IDs, or
@@ -90,8 +90,9 @@ Walrus/Bosphor payload path
 
 GOAT/x402 agent path
   User mandate + round details
-    -> POST /goat/agent-decision
+    -> POST /goat/agent-decision, or browser demo -> POST /goat/paid-agent-decision
     -> x402 payment requirement
+    -> funded paid client / backend demo relay signs Stellar testnet USDC payment
     -> structured decision + salt + commitment hash
     -> UI can prefill the existing sealed commitment path
 ```
@@ -111,6 +112,10 @@ the accepted intent is already a real on-chain Bosphor record. The EVM route is
 explicitly a Walrus storage route; it does not claim that MetaMask can sign
 Soroban transactions or replace Stellar settlement.
 
+Bosphor calls are normal EVM payable transactions. The active Sepolia account
+must cover both `msg.value = nativeFee` from `quote(...)` and the gas fee; ETH
+on another account or network does not help that transaction.
+
 A deployed Stellar contract must include `attach_storage_ref` and
 `get_storage_ref`; older testnet contract IDs that only expose `create_round`
 cannot bind the Walrus receipt on-chain.
@@ -118,6 +123,17 @@ cannot bind the Walrus receipt on-chain.
 For GOAT, live tool execution requires real GOAT credentials/faucet/API access.
 Without those, agent responses are marked `local_deterministic`; the x402
 payment boundary, schema validation, and commitment handoff remain real.
+
+The hosted demo uses a practical split:
+
+- **Vercel** serves the static web app and only needs `VITE_GOAT_AGENT_API_URL`.
+- **DigitalOcean** runs `services/appraisal-api`, holds runtime x402 secrets,
+  and can optionally hold `GOAT_DEMO_PAYER_SECRET` for the one-click paid demo
+  relay.
+- `POST /goat/agent-decision` remains the real protected boundary. The demo
+  relay at `POST /goat/paid-agent-decision` does not generate a free decision;
+  it pays the protected endpoint server-side with a funded Stellar testnet
+  payer and returns the same settlement receipt + decision to the browser.
 
 ---
 
@@ -147,6 +163,10 @@ This repo includes a real GOAT integration surface for AI builders:
 - `@sub-rosa/goat` installs and wraps `@goatnetwork/agentkit`.
 - `POST /goat/agent-decision` is protected by the existing x402 resource-server
   pattern used by `POST /appraise`.
+- `POST /goat/paid-agent-decision` is a demo relay for browsers: it uses
+  `GOAT_DEMO_PAYER_SECRET` on the backend to pay the protected GOAT endpoint,
+  so reviewers see a real x402 settlement without exposing a payer secret in
+  the Vercel bundle.
 - The response is structured JSON with a bid recommendation, risk notes, salt,
   and Sub Rosa commitment hash.
 - The `/goat` UI can hand a paid decision into the sealed commitment demo by

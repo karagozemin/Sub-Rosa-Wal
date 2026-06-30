@@ -100,6 +100,10 @@ const res = await paidFetch("/goat/agent-decision", {
 const { bidAmount, commitmentPayload } = res.body.decision;
 ```
 
+Hosted browser demos can call `POST /goat/paid-agent-decision` instead. That
+route still pays the protected `POST /goat/agent-decision` endpoint server-side
+using `GOAT_DEMO_PAYER_SECRET`; it is a demo relay, not a free decision path.
+
 The returned `commitmentPayload` can be shown to the user, stored as encrypted
 evidence through Walrus/Bosphor, or used to prefill the normal Sub Rosa sealed
 commit flow. Live GOAT tool execution requires real GOAT credentials; without

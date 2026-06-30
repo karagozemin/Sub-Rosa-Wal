@@ -69,8 +69,9 @@ sealed commit or settlement path.
 
 - Open `#/goat` and show the GOAT integration status.
 - Enter a mandate, max bid, max escrow, and risk tolerance.
-- Explain that `POST /goat/agent-decision` is x402-gated; a plain browser call
-  correctly receives HTTP 402 unless a funded paid client signs and retries.
+- Explain that `POST /goat/agent-decision` is x402-gated; the hosted browser
+  demo calls `POST /goat/paid-agent-decision`, which pays that protected route
+  server-side with the funded demo payer and returns the settlement receipt.
 - When a paid response is available, the output is structured JSON with
   recommended action, bid amount, confidence, salt, and commitment hash.
 - Click **Use in sealed commitment** to prefill the normal Sub Rosa commit path.

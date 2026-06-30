@@ -35,7 +35,10 @@ is not described as live GOAT inference.
 ```mermaid
 flowchart LR
   User[User mandate] --> UI[Sub Rosa /goat UI]
-  UI --> API[POST /goat/agent-decision]
+  UI --> Relay{Hosted demo relay?}
+  Relay -->|No| API[POST /goat/agent-decision]
+  Relay -->|Yes| Demo[POST /goat/paid-agent-decision]
+  Demo --> API
   API --> X402[x402 payment check]
   X402 --> Agent[GOAT AgentKit session]
   Agent --> Decision[Structured agent decision]
@@ -88,6 +91,15 @@ payment, it validates the body and returns:
 }
 ```
 
+`POST /goat/paid-agent-decision`
+
+Hosted-demo relay for browsers. It is not the production payment boundary and
+it does not mint a free decision. When `GOAT_DEMO_PAYER_SECRET` is configured on
+the backend, this route uses the same x402 client flow to pay
+`POST /goat/agent-decision` server-side, then returns the protected endpoint's
+settlement receipt and decision. This avoids putting a Stellar payer secret in
+the Vercel bundle while keeping the paid endpoint honest.
+
 ## Environment
 
 The x402 server still needs the existing appraisal API secrets:
@@ -112,6 +124,9 @@ GOAT_X402_ENABLED=true
 GOAT_X402_RECEIVER_ADDRESS=
 GOAT_X402_NETWORK=stellar:testnet
 GOAT_X402_PRICE_USDC=0.10
+
+# Optional hosted-demo relay. Demo-only funded testnet payer.
+GOAT_DEMO_PAYER_SECRET=S...
 ```
 
 Frontend:
@@ -127,6 +142,8 @@ Implemented live today:
 - Real `@goatnetwork/agentkit` dependency.
 - GOAT AgentKit session construction and action registration.
 - Real x402 HTTP 402 challenge path for `POST /goat/agent-decision`.
+- Optional real x402 server-side paid demo relay at
+  `POST /goat/paid-agent-decision`.
 - Structured Zod validation for request and response.
 - Commitment payload generation using Sub Rosa's existing commitment encoding.
 - UI handoff into the sealed commitment flow.
@@ -135,4 +152,6 @@ Requires external access:
 
 - GOAT credentials or API/faucet access for live GOAT tool execution.
 - Funded Stellar testnet accounts with USDC trustlines for paid x402 calls.
+- `GOAT_DEMO_PAYER_SECRET` only for the hosted one-click demo; it should be a
+  low-value testnet payer and should never be shipped in frontend code.
 - Walrus/Bosphor env vars for storing encrypted artifacts in the storage route.

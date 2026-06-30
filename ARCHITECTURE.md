@@ -43,6 +43,9 @@ layer**:
 - x402 gates paid computation before premium agent/appraisal output is returned.
 - GOAT AgentKit provides the AI-agent runtime boundary for structured decisions
   that can feed the same commitment flow.
+- The hosted browser demo uses a backend paid relay for GOAT decisions so the
+  browser does not need to hold a Stellar payer secret or construct Soroban
+  auth entries directly.
 
 ```text
                  ┌───────────────────────────────────────┐
@@ -146,6 +149,10 @@ sequenceDiagram
     G-->>X: structured decision mode + tool status
     X-->>A: decision + salt + commitment hash
     A->>C: use decision in normal sealed commit path
+  else GOAT / hosted browser demo
+    A->>X: POST /goat/paid-agent-decision
+    X->>X: funded backend payer pays POST /goat/agent-decision
+    X-->>A: x402 settlement receipt + decision + commitment hash
   end
 ```
 
@@ -184,6 +191,7 @@ Package manager: **pnpm** workspace. Contract build: **Stellar CLI** + Rust (`wa
 | **GOAT AgentKit adapter** | Structured agent decision flow and tool registration boundary | Live GOAT execution without credentials/faucet/API access |
 | **Auditor** | Identity disclosure when given secret | Must not learn bid values before R |
 | **Appraisal API** | Valuation after x402 pay | Unbiased pricing (economic trust) |
+| **GOAT paid demo relay** | Browser-friendly funded testnet payment demo | Production custody; it is a demo payer, not user-owned funds |
 
 Full adversary analysis: [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md).
 
@@ -196,6 +204,7 @@ On **testnet**, both appraisal and prize settlement use **USDC SAC**. They are i
 | Rail | Path | Used for |
 | --- | --- | --- |
 | **x402** | Agent/user → resource server via HTTP 402 + facilitator | Appraisal and GOAT agent-action payment |
+| **GOAT demo relay** | Browser → backend relay → same x402 resource server | One-click hosted demo; still settles x402 before decision output |
 | **SAC `settle()`** | Round contract escrow → operator + refunds | Winner prize — **not** x402 |
 
 **Mainnet smoke** uses **native XLM SAC** (1 / 5 XLM), not USDC — see [docs/LIMITATIONS.md](./docs/LIMITATIONS.md).

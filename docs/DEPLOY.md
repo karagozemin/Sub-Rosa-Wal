@@ -170,10 +170,22 @@ Runtime server config:
 | `GOAT_AGENTKIT_API_KEY` / `GOAT_API_KEY` | Live GOAT credentials, if available |
 | `GOAT_LIVE_ENABLED` | Must be `true` before responses claim live GOAT mode |
 | `GOAT_NETWORK` | GOAT network label, default `goat-testnet` |
+| `GOAT_DEMO_PAYER_SECRET` | Optional demo-only funded Stellar testnet payer for `POST /goat/paid-agent-decision` |
 
 Without live GOAT credentials and `GOAT_LIVE_ENABLED=true`, the API marks
 decisions as `local_deterministic`. That mode is acceptable for local review of
 schema, x402 boundary, and UI handoff; it is not live GOAT execution.
+
+Hosted deployment split used by the current demo:
+
+- Vercel hosts `apps/web` and should only receive public `VITE_*` variables.
+  Do not put Stellar payer secrets in Vercel.
+- DigitalOcean runs `services/appraisal-api` and holds runtime secrets:
+  `FACILITATOR_SECRET`, `PAY_TO`, `PAYMENT_ASSET`, x402 pricing/RPC vars, and
+  optionally `GOAT_DEMO_PAYER_SECRET`.
+- The browser calls `POST /goat/paid-agent-decision` when the relay is
+  available. That route pays `POST /goat/agent-decision` server-side and returns
+  the real x402 settlement receipt.
 
 ---
 
@@ -224,7 +236,8 @@ Want live Walrus-backed round creation?
   → set VITE_WALRUS_PUBLISHER_URL or Bosphor vars and use a contract with attach_storage_ref
 
 Want GOAT agent decisions?
-  → run appraisal-api with x402 vars; add GOAT credentials only for live mode
+  → run appraisal-api with x402 vars; add GOAT_DEMO_PAYER_SECRET for one-click hosted demo;
+    add GOAT credentials only for live GOAT execution mode
 
 Running keeper 24/7?
   → KEEPER_SECRET + ROUND_CONTRACT_ID on the server (runtime)
