@@ -2,10 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   fetchGoatStatus,
+  GoatPaymentRequiredError,
+  GOAT_AGENT_API_URL,
+  GOAT_PAYER_SECRET,
+  requestPaidGoatDecision,
   requestGoatDecision,
   savePreparedGoatCommitment,
   type GoatDecision,
   type GoatDecisionRequest,
+  type GoatPaymentReceipt,
+  type GoatPaymentRequirement,
   type GoatStatus,
 } from "../lib/goatAgentClient";
 import { decisionBidToDemoEntry } from "../lib/goatDecisionCommitment";
@@ -38,12 +44,18 @@ export function GoatAgentPage({ goHome, goDemo }: Props) {
   const [status, setStatus] = useState<GoatStatus | null>(null);
   const [request, setRequest] = useState<GoatDecisionRequest>(initialRequest);
   const [decision, setDecision] = useState<GoatDecision | null>(null);
+  const [payment, setPayment] = useState<GoatPaymentReceipt | null>(null);
+  const [paymentRequirement, setPaymentRequirement] = useState<GoatPaymentRequirement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stage, setStage] = useState<
+    "idle" | "checking" | "payment_required" | "signing" | "settled"
+  >("idle");
   const preparedEntry = useMemo(
     () => (decision ? decisionBidToDemoEntry(decision) : null),
     [decision],
   );
+  const canPayInBrowser = GOAT_PAYER_SECRET.length > 0;
 
   useEffect(() => {
     fetchGoatStatus().then(setStatus).catch((e) => {
@@ -54,10 +66,25 @@ export function GoatAgentPage({ goHome, goDemo }: Props) {
   async function generate() {
     setBusy(true);
     setError(null);
+    setDecision(null);
+    setPayment(null);
+    setPaymentRequirement(null);
+    setStage(canPayInBrowser ? "signing" : "checking");
     try {
-      setDecision(await requestGoatDecision(request));
+      const result = canPayInBrowser
+        ? await requestPaidGoatDecision(request)
+        : await requestGoatDecision(request);
+      setDecision(result.decision);
+      setPayment(result.payment ?? null);
+      setStage("settled");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (e instanceof GoatPaymentRequiredError) {
+        setPaymentRequirement(e.requirement);
+        setStage("payment_required");
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+        setStage("idle");
+      }
     } finally {
       setBusy(false);
     }
@@ -223,12 +250,18 @@ export function GoatAgentPage({ goHome, goDemo }: Props) {
         </form>
 
         <motion.aside layout className="panel goat-result">
-          <div>
-            <p className="eyebrow">Structured output</p>
-            <h2>{decision ? decision.recommendedAction : "No decision yet"}</h2>
-          </div>
+          <ResultHeader decision={decision} stage={stage} />
           {decision ? (
             <>
+              {payment ? (
+                <div className="goat-success-strip">
+                  <span>payment settled</span>
+                  <strong>{payment.transaction ? short(payment.transaction) : "x402 accepted"}</strong>
+                  <p>
+                    Paid agent action unlocked, decision generated, and commitment payload is ready.
+                  </p>
+                </div>
+              ) : null}
               <div className="goat-result-grid">
                 <article>
                   <span>bid</span>
@@ -264,14 +297,125 @@ export function GoatAgentPage({ goHome, goDemo }: Props) {
                 Use in sealed commitment
               </button>
             </>
+          ) : paymentRequirement ? (
+            <PaymentCheckpoint
+              requirement={paymentRequirement}
+              status={status}
+              canPayInBrowser={canPayInBrowser}
+            />
           ) : (
-            <p className="placeholder">
-              The result will include a validated action, bid amount, salt, commitment hash, and
-              GOAT mode disclosure.
-            </p>
+            <LaunchState status={status} canPayInBrowser={canPayInBrowser} busy={busy} />
           )}
         </motion.aside>
       </section>
     </main>
   );
+}
+
+function ResultHeader({
+  decision,
+  stage,
+}: {
+  decision: GoatDecision | null;
+  stage: "idle" | "checking" | "payment_required" | "signing" | "settled";
+}) {
+  const title = decision
+    ? decision.recommendedAction
+    : stage === "payment_required"
+      ? "Payment checkpoint armed"
+      : stage === "signing"
+        ? "Signing x402 payment"
+        : "Ready for paid decision";
+  return (
+    <div>
+      <p className="eyebrow">Agent output</p>
+      <h2>{title}</h2>
+    </div>
+  );
+}
+
+function LaunchState({
+  status,
+  canPayInBrowser,
+  busy,
+}: {
+  status: GoatStatus | null;
+  canPayInBrowser: boolean;
+  busy: boolean;
+}) {
+  return (
+    <div className="goat-empty-state">
+      <div className="goat-steps" aria-label="GOAT paid decision progress">
+        <Step done label="Backend online" value={status ? status.x402.network : "checking"} />
+        <Step done={canPayInBrowser} label="Payer wallet" value={canPayInBrowser ? "loaded" : "not in browser"} />
+        <Step done={busy} label="x402 request" value={busy ? "running" : "ready"} />
+      </div>
+      <p>
+        Press generate to hit the protected GOAT endpoint. With a funded payer secret configured,
+        the browser signs the x402 payment, settles on Stellar testnet, then shows the transaction
+        and prepared sealed-bid commitment here.
+      </p>
+    </div>
+  );
+}
+
+function PaymentCheckpoint({
+  requirement,
+  status,
+  canPayInBrowser,
+}: {
+  requirement: GoatPaymentRequirement;
+  status: GoatStatus | null;
+  canPayInBrowser: boolean;
+}) {
+  const api = GOAT_AGENT_API_URL.replace(/\/$/, "");
+  return (
+    <div className="goat-payment-card">
+      <div className="goat-payment-pulse">
+        <span />
+        <strong>402</strong>
+      </div>
+      <div>
+        <p className="eyebrow">x402 is enforcing payment</p>
+        <h3>{requirement.price || status?.x402.priceUsdc || "0.10"} USDC to unlock the agent</h3>
+        <p>
+          The backend is reachable and refused the unpaid call. That is the real payment boundary,
+          not a UI mock.
+        </p>
+      </div>
+      <dl>
+        <div>
+          <dt>receiver</dt>
+          <dd>{requirement.receiverAddress}</dd>
+        </div>
+        <div>
+          <dt>network</dt>
+          <dd>{requirement.network}</dd>
+        </div>
+        <div>
+          <dt>endpoint</dt>
+          <dd>{api}/goat/agent-decision</dd>
+        </div>
+      </dl>
+      <div className="goat-terminal">
+        {canPayInBrowser
+          ? "Payer key is configured. Click Generate again to sign + settle from the browser."
+          : "Add VITE_GOAT_PAYER_SECRET with a funded Stellar testnet payer, then redeploy Vercel for one-click paid decisions."}
+      </div>
+    </div>
+  );
+}
+
+function Step({ done, label, value }: { done: boolean; label: string; value: string }) {
+  return (
+    <article className={done ? "done" : ""}>
+      <span>{done ? "ready" : "pending"}</span>
+      <strong>{label}</strong>
+      <small>{value}</small>
+    </article>
+  );
+}
+
+function short(value: string): string {
+  return value.length > 18 ? `${value.slice(0, 10)}...${value.slice(-8)}` : value;
 }

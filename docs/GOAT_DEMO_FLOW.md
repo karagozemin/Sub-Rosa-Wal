@@ -79,10 +79,29 @@ Enter:
 
 Click `Generate paid decision`.
 
-From a plain browser request, the endpoint will return HTTP 402 because no
-x402 payment signature is attached. That is expected and proves the endpoint is
-not bypassing payment. A funded paid agent client can sign and retry, following
-the same pattern as `services/appraisal-api/src/client.ts`.
+The UI has two honest states:
+
+- Without a browser payer secret, the endpoint returns HTTP 402 and the right
+  panel shows the payment checkpoint: price, receiver, network, and endpoint.
+  That is expected and proves the endpoint is not bypassing payment.
+- With a funded Stellar testnet payer configured, the browser signs the x402
+  payment, retries the same protected endpoint, shows the settlement receipt,
+  and renders the structured GOAT decision.
+
+For a one-click paid browser demo, set these Vercel/local web build variables:
+
+```bash
+VITE_GOAT_AGENT_API_URL=https://your-app.ondigitalocean.app
+VITE_GOAT_PAYER_SECRET=S...
+VITE_GOAT_RPC_URL=https://soroban-testnet.stellar.org
+```
+
+`VITE_GOAT_PAYER_SECRET` is demo-only and must be a funded testnet payer with a
+USDC trustline/balance for the backend's `PAYMENT_ASSET`. Do not use a
+production or valuable wallet secret in a public frontend build.
+
+You can also keep secrets out of the browser and run a paid agent client from
+Node, following `services/appraisal-api/src/client.ts`.
 
 ## 7. Use the decision in Sub Rosa
 

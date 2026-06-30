@@ -1,6 +1,12 @@
 export const GOAT_AGENT_API_URL =
   import.meta.env.VITE_GOAT_AGENT_API_URL ?? "http://127.0.0.1:4021";
 
+export const GOAT_PAYER_SECRET =
+  import.meta.env.VITE_GOAT_PAYER_SECRET?.trim() ?? "";
+
+export const GOAT_RPC_URL =
+  import.meta.env.VITE_GOAT_RPC_URL?.trim() ?? "https://soroban-testnet.stellar.org";
+
 export type GoatDecisionRequest = {
   agentId: string;
   decisionType: "sealed_bid" | "evaluation" | "negotiation";
@@ -46,6 +52,17 @@ export type GoatDecision = {
   };
 };
 
+export type GoatPaymentReceipt = {
+  transaction?: string;
+  network?: string;
+  payer?: string;
+};
+
+export type GoatPaidDecision = {
+  decision: GoatDecision;
+  payment?: GoatPaymentReceipt;
+};
+
 export type GoatStatus = {
   status: {
     mode: "live" | "local_deterministic";
@@ -63,6 +80,14 @@ export type GoatStatus = {
     priceUsdc: number;
     route: "POST /goat/agent-decision";
   };
+};
+
+export type GoatPaymentRequirement = {
+  price: number;
+  network: string;
+  receiverAddress: string;
+  asset?: string;
+  accepts?: unknown[];
 };
 
 export type GoatPreparedCommitment = {
@@ -85,7 +110,7 @@ export async function fetchGoatStatus(): Promise<GoatStatus> {
 
 export async function requestGoatDecision(
   request: GoatDecisionRequest,
-): Promise<GoatDecision> {
+): Promise<GoatPaidDecision> {
   const res = await fetch(`${GOAT_AGENT_API_URL.replace(/\/$/, "")}/goat/agent-decision`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -93,18 +118,102 @@ export async function requestGoatDecision(
   });
   const body = (await res.json().catch(() => ({}))) as {
     decision?: GoatDecision;
+    payment?: GoatPaymentReceipt;
     error?: string;
     accepts?: unknown[];
   };
   if (res.status === 402) {
-    throw new Error(
-      `x402 payment required by ${GOAT_AGENT_API_URL}. Use a paid agent client or run the backend e2e with funded Stellar testnet keys.`,
-    );
+    throw new GoatPaymentRequiredError({
+      price: extractFirstNumber(body.accepts, "price") ?? 0,
+      network: extractFirstString(body.accepts, "network") ?? "stellar:testnet",
+      receiverAddress:
+        extractFirstString(body.accepts, "payTo") ??
+        extractFirstString(body.accepts, "payToAddress") ??
+        "unknown",
+      asset: extractFirstString(body.accepts, "asset"),
+      accepts: body.accepts,
+    });
   }
   if (!res.ok || !body.decision) {
     throw new Error(body.error ?? `GOAT decision failed with HTTP ${res.status}`);
   }
-  return body.decision;
+  return { decision: body.decision, payment: body.payment };
+}
+
+export async function requestPaidGoatDecision(
+  request: GoatDecisionRequest,
+  payerSecret = GOAT_PAYER_SECRET,
+): Promise<GoatPaidDecision> {
+  if (!payerSecret) {
+    throw new Error(
+      "Missing VITE_GOAT_PAYER_SECRET. Add a funded Stellar testnet payer secret to run the real paid browser demo.",
+    );
+  }
+
+  const [{ x402Client, x402HTTPClient }, { createEd25519Signer }, { ExactStellarScheme }] =
+    await Promise.all([
+      import("@x402/core/client"),
+      import("@x402/stellar"),
+      import("@x402/stellar/exact/client"),
+    ]);
+
+  const network = "stellar:testnet";
+  const signer = createEd25519Signer(payerSecret, network);
+  const core = new x402Client().register(
+    "stellar:*",
+    new ExactStellarScheme(signer, { url: GOAT_RPC_URL }),
+  );
+  const http = new x402HTTPClient(core);
+  const url = `${GOAT_AGENT_API_URL.replace(/\/$/, "")}/goat/agent-decision`;
+  const init: RequestInit = {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(request),
+  };
+
+  const first = await fetch(url, init);
+  if (first.status !== 402) {
+    const body = (await first.json().catch(() => ({}))) as {
+      decision?: GoatDecision;
+      payment?: GoatPaymentReceipt;
+      error?: string;
+    };
+    if (!first.ok || !body.decision) {
+      throw new Error(body.error ?? `GOAT decision failed with HTTP ${first.status}`);
+    }
+    return { decision: body.decision, payment: body.payment };
+  }
+
+  const paymentRequiredBody = await first.clone().json().catch(() => undefined);
+  const paymentRequired = http.getPaymentRequiredResponse(
+    (name: string) => first.headers.get(name),
+    paymentRequiredBody,
+  );
+  const payload = await http.createPaymentPayload(paymentRequired);
+  const paymentHeaders = http.encodePaymentSignatureHeader(payload);
+  const paid = await fetch(url, {
+    ...init,
+    headers: { ...(init.headers ?? {}), ...paymentHeaders },
+  });
+  const body = (await paid.json().catch(() => ({}))) as {
+    decision?: GoatDecision;
+    payment?: GoatPaymentReceipt;
+    error?: string;
+  };
+  if (!paid.ok || !body.decision) {
+    throw new Error(body.error ?? `paid GOAT decision failed with HTTP ${paid.status}`);
+  }
+  return { decision: body.decision, payment: body.payment };
+}
+
+export class GoatPaymentRequiredError extends Error {
+  requirement: GoatPaymentRequirement;
+
+  constructor(requirement: GoatPaymentRequirement) {
+    super("x402 payment required");
+    this.name = "GoatPaymentRequiredError";
+    this.requirement = requirement;
+  }
 }
 
 export function savePreparedGoatCommitment(decision: GoatDecision): GoatPreparedCommitment {
@@ -133,4 +242,35 @@ export function consumePreparedGoatCommitment(): GoatPreparedCommitment | null {
   } catch {
     return null;
   }
+}
+
+function extractFirstString(values: unknown[] | undefined, key: string): string | undefined {
+  for (const value of values ?? []) {
+    const found = extractRecordValue(value, key);
+    if (typeof found === "string" && found.length > 0) return found;
+  }
+  return undefined;
+}
+
+function extractFirstNumber(values: unknown[] | undefined, key: string): number | undefined {
+  for (const value of values ?? []) {
+    const found = extractRecordValue(value, key);
+    if (typeof found === "number") return found;
+    if (typeof found === "string" && found.trim()) {
+      const parsed = Number(found);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return undefined;
+}
+
+function extractRecordValue(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (key in record) return record[key];
+  for (const child of Object.values(record)) {
+    const found = extractRecordValue(child, key);
+    if (found !== undefined) return found;
+  }
+  return undefined;
 }

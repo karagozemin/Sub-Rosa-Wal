@@ -139,6 +139,154 @@
   font-size: 1.4rem;
 }
 
+.goat-empty-state,
+.goat-payment-card {
+  display: grid;
+  gap: 18px;
+}
+
+.goat-empty-state p,
+.goat-payment-card p,
+.goat-success-strip p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.goat-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.goat-steps article {
+  min-height: 104px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.goat-steps article.done {
+  border-color: rgba(110, 245, 176, 0.42);
+  background: rgba(31, 157, 98, 0.12);
+}
+
+.goat-steps span,
+.goat-payment-card span,
+.goat-success-strip span {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.goat-steps strong,
+.goat-steps small {
+  display: block;
+}
+
+.goat-steps strong {
+  margin-top: 12px;
+  color: var(--ink);
+}
+
+.goat-steps small {
+  margin-top: 5px;
+  color: var(--muted);
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.goat-payment-card {
+  padding: 18px;
+  border: 1px solid rgba(128, 148, 255, 0.42);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, rgba(92, 117, 255, 0.16), rgba(31, 157, 98, 0.08));
+}
+
+.goat-payment-card h3 {
+  margin: 6px 0 8px;
+  font-size: 1.65rem;
+}
+
+.goat-payment-pulse {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.goat-payment-pulse span {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--amber);
+  box-shadow: 0 0 0 0 rgba(255, 204, 102, 0.7);
+  animation: goat-pulse 1.5s infinite;
+}
+
+.goat-payment-pulse strong {
+  color: var(--amber);
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.goat-payment-card dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.goat-payment-card dl > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.goat-payment-card dt {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.goat-payment-card dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.goat-terminal {
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  background: rgba(4, 5, 5, 0.72);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.goat-success-strip {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid rgba(110, 245, 176, 0.44);
+  border-radius: var(--radius-sm);
+  background: rgba(31, 157, 98, 0.16);
+}
+
+.goat-success-strip strong {
+  color: var(--green);
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
 .goat-result ul {
   margin: 0;
   padding-left: 18px;
@@ -179,12 +327,25 @@
   }
 
   .goat-form-grid,
-  .goat-result-grid {
+  .goat-result-grid,
+  .goat-steps {
     grid-template-columns: 1fr;
   }
 
   .goat-prefill-banner {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@keyframes goat-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 204, 102, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 204, 102, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 204, 102, 0);
   }
 }

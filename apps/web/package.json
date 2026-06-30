@@ -18,6 +18,8 @@
     "@sub-rosa/sdk": "workspace:*",
     "@sub-rosa/tlock": "workspace:*",
     "@tanstack/react-query": "^5.101.1",
+    "@x402/core": "^2.14.0",
+    "@x402/stellar": "^2.14.0",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.1",
     "events": "^3.3.0",
