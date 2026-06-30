@@ -1,22 +1,24 @@
-# Sub Rosa Walrus Storage Layer — Architecture
+# Sub Rosa Coordination Stack — Architecture
 
-High-level map of the Walrus-backed storage layer, wallet routes, trust
-boundaries, round lifecycle, and where each proof runs. For crypto and
-settlement detail see [docs/TECH_DESIGN.md](./docs/TECH_DESIGN.md).
+High-level map of the sealed coordination stack: Soroban commitments, Drand
+timelock reveal, Walrus/Bosphor encrypted payloads, x402 payments, GOAT agent
+decisions, wallet routes, trust boundaries, and where each proof runs. For
+crypto and settlement detail see [docs/TECH_DESIGN.md](./docs/TECH_DESIGN.md).
 
 ---
 
 ## Problem and primitive
 
 Sub Rosa is a **sealed commit–reveal coordination primitive** whose canonical
-transaction layer is Stellar Soroban. The Walrus extension adds encrypted,
-verifiable payload storage for the metadata and evidence around those sealed
-submissions. Participants commit now; a public Drand round **R** forces
-simultaneous opening later; the contract clears and settles without operator
-discretion.
+transaction layer is Stellar Soroban. The EVM/Walrus build adds encrypted,
+verifiable payload storage, x402-paid appraisals, and GOAT-powered agent
+decisions around the same sealed round. Participants commit now; a public Drand
+round **R** forces simultaneous opening later; the contract clears and settles
+without operator discretion.
 
 | Phase | Who acts | What happens |
 | --- | --- | --- |
+| **Agent decision** | User / GOAT agent | Optional x402-paid strategy/evaluation produces structured decision + commitment payload |
 | **Storage reference** | Operator / app | Encrypt metadata, store on Walrus, attach compact reference on Soroban |
 | **Commit** | Bidder or agent session key | Lock escrow, post commitment `H`, store tlock ciphertext + auditor blob |
 | **Wait R** | — | Bids undecryptable; only `H` and escrow are public |
@@ -30,45 +32,55 @@ The operator does **not** need keys to open bids. After R, values are public; id
 
 ## System diagram
 
-Sub Rosa Walrus separates the **truth layer** from the **payload layer**:
+Sub Rosa separates the **truth layer**, **payload layer**, and **agent/payment
+layer**:
 
 - Stellar/Soroban stores commitments, reveal gates, escrow, clearing, settlement,
   and compact storage references.
 - Walrus stores encrypted heavy payloads.
 - Bosphor is the EVM route into Walrus; it is not a Stellar signer and it does
   not settle Sub Rosa rounds.
+- x402 gates paid computation before premium agent/appraisal output is returned.
+- GOAT AgentKit provides the AI-agent runtime boundary for structured decisions
+  that can feed the same commitment flow.
 
 ```text
-                         ┌─────────────────────────────────────────────┐
-                         │              apps/web                       │
-                         │ client-side encryption + route selection     │
-                         └───────────────┬─────────────────────────────┘
-                                         │
-                  ┌──────────────────────┴──────────────────────┐
-                  │                                             │
-                  ▼                                             ▼
-       ┌──────────────────────┐                      ┌──────────────────────┐
-       │ Freighter route       │                      │ EVM route             │
-       │ Stellar wallet active │                      │ RainbowKit active     │
-       └──────────┬───────────┘                      └──────────┬───────────┘
-                  │                                             │
-                  ▼                                             ▼
-       ┌──────────────────────┐                      ┌──────────────────────┐
-       │ Walrus publisher      │                      │ BosphorAdapter EVM    │
-       │ encrypted blob        │                      │ quote + submitIntent  │
-       │ blobId + endEpoch     │                      │ IntentSubmitted(id)   │
-       └──────────┬───────────┘                      └──────────┬───────────┘
-                  │                                             │
-                  ▼                                             ▼
-       ┌──────────────────────┐                      ┌──────────────────────┐
-       │ Stellar Soroban       │                      │ Walrus on Sui         │
-       │ create_round          │                      │ encrypted blobs       │
-       │ attach_storage_ref    │                      │ later proof return    │
-       │ commit/reveal/settle  │                      │ IntentExecuted proof  │
-       └──────────────────────┘                      └──────────────────────┘
+                 ┌───────────────────────────────────────┐
+                 │               apps/web                 │
+                 │ /demo + /goat + route selection        │
+                 └───────────────┬───────────────────────┘
+                                 │
+        ┌────────────────────────┼──────────────────────────┐
+        │                        │                          │
+        ▼                        ▼                          ▼
+┌───────────────┐        ┌────────────────┐        ┌───────────────────┐
+│ GOAT agent UI │        │ Freighter route │        │ RainbowKit route  │
+│ mandate input │        │ Stellar wallet  │        │ EVM wallet        │
+└───────┬───────┘        └───────┬────────┘        └────────┬──────────┘
+        │                        │                          │
+        ▼                        ▼                          ▼
+┌───────────────┐        ┌────────────────┐        ┌───────────────────┐
+│ x402 resource │        │ Walrus          │        │ BosphorAdapter    │
+│ server        │        │ publisher       │        │ submitIntent      │
+└───────┬───────┘        └───────┬────────┘        └────────┬──────────┘
+        │                        │                          │
+        ▼                        ▼                          ▼
+┌───────────────┐        ┌────────────────┐        ┌───────────────────┐
+│ GOAT AgentKit │        │ encrypted blob │        │ IntentSubmitted   │
+│ session       │        │ blobId/epoch   │        │ intentId          │
+└───────┬───────┘        └───────┬────────┘        └────────┬──────────┘
+        │                        │                          │
+        └────────► commitment payload ◄─────────────────────┘
+                                 │
+                                 ▼
+                      ┌──────────────────────┐
+                      │ Stellar Soroban       │
+                      │ create/attach/commit  │
+                      │ reveal/clear/settle   │
+                      └──────────────────────┘
 
-       Numeric Soroban round_id                       Bosphor intentId
-       is shareable for joining                       is shareable for joining
+GOAT decision id / H        Numeric round_id             Bosphor intentId
+feed commit flow            joins Soroban route          joins storage route
 ```
 
 The original Sub Rosa backend remains intact:
@@ -79,6 +91,7 @@ packages/sdk        RoundContract bindings + SubRosaClient
 services/keeper     permissionless open_reveal / reveal / clear / settle
 services/agent      mandate/cap checks + x402 + commit flow
 services/appraisal  HTTP 402 appraisal rail
+packages/goat       GOAT AgentKit session + decision schema + x402 metadata
 ```
 
 ---
@@ -98,7 +111,8 @@ sequenceDiagram
   participant C as Round contract
   participant W as Walrus publisher
   participant B as Bosphor adapter
-  participant X as x402 appraisal API
+  participant X as x402 resource server
+  participant G as GOAT AgentKit
   participant D as Drand quicknet
   participant K as Keeper
 
@@ -124,6 +138,14 @@ sequenceDiagram
     A->>B: submitIntent(encrypted sealed score)
     A->>B: submitIntent(encrypted reveal metadata)
     Note over Op,A: Storage-backed demo route only; Stellar settlement is separate
+  else GOAT / paid agent route
+    A->>X: POST /goat/agent-decision
+    X-->>A: HTTP 402 payment requirement
+    A->>X: retry with X-PAYMENT
+    X->>G: create GOAT agent session / register tools
+    G-->>X: structured decision mode + tool status
+    X-->>A: decision + salt + commitment hash
+    A->>C: use decision in normal sealed commit path
   end
 ```
 
@@ -141,6 +163,7 @@ sequenceDiagram
 | `services/keeper/` | Ops | Permissionless reveal/clear/settle; `keeper:watch` daemon |
 | `services/appraisal-api/` | Service | x402-gated appraisal (SEP-41 USDC on testnet) |
 | `services/agent/` | Agent support | Session mandate, cap checks, x402 + commit flow |
+| `packages/goat/` | Agent runtime | GOAT AgentKit wrapper, decision schema, x402 requirement metadata, commitment payload adapter |
 | `apps/web/` | UI | Jury demo; encrypts metadata, stores through Walrus/Bosphor, reads `demo-trace.generated.ts` from `agents:e2e` |
 
 Package manager: **pnpm** workspace. Contract build: **Stellar CLI** + Rust (`wasm32v1-none`).
@@ -158,6 +181,7 @@ Package manager: **pnpm** workspace. Contract build: **Stellar CLI** + Rust (`wa
 | **Operator** | Creating rounds, receiving winner payment | Reading sealed bids before R |
 | **Keeper** | Liveness (open/reveal/clear) | Secrecy after R (all bids must reveal) |
 | **Agent software** | Enforcing mandate caps off-chain | Honesty if compromised or buggy |
+| **GOAT AgentKit adapter** | Structured agent decision flow and tool registration boundary | Live GOAT execution without credentials/faucet/API access |
 | **Auditor** | Identity disclosure when given secret | Must not learn bid values before R |
 | **Appraisal API** | Valuation after x402 pay | Unbiased pricing (economic trust) |
 
@@ -171,7 +195,7 @@ On **testnet**, both appraisal and prize settlement use **USDC SAC**. They are i
 
 | Rail | Path | Used for |
 | --- | --- | --- |
-| **x402** | Agent → appraisal server via HTTP 402 + facilitator | Appraisal micro-payment only |
+| **x402** | Agent/user → resource server via HTTP 402 + facilitator | Appraisal and GOAT agent-action payment |
 | **SAC `settle()`** | Round contract escrow → operator + refunds | Winner prize — **not** x402 |
 
 **Mainnet smoke** uses **native XLM SAC** (1 / 5 XLM), not USDC — see [docs/LIMITATIONS.md](./docs/LIMITATIONS.md).
@@ -207,6 +231,40 @@ allowing a sealed score submission.
 
 See [docs/WALRUS_STORAGE.md](./docs/WALRUS_STORAGE.md) for the storage receipt
 shape, environment variables, and non-goals.
+
+---
+
+## GOAT agent layer
+
+GOAT adds an AI-agent decision path before a user or autonomous participant
+commits. It does not replace tlock, Soroban, Walrus, or the keeper.
+
+```text
+mandate + round details
+        │
+        ▼
+POST /goat/agent-decision
+        │
+        ▼
+x402 payment check
+        │
+        ▼
+GOAT AgentKit session
+        │
+        ▼
+structured decision JSON
+        │
+        ▼
+salt + commitment hash -> existing sealed commit UI
+```
+
+The response is validated and explicitly reports whether GOAT is running in
+`live` mode or `local_deterministic` mode. Live GOAT execution requires real
+GOAT credentials/faucet/API access; local deterministic mode exists for review,
+schema validation, and UI handoff testing.
+
+See [docs/GOAT_INTEGRATION.md](./docs/GOAT_INTEGRATION.md) for API shape,
+environment variables, and the local-vs-live boundary.
 
 ---
 
@@ -309,6 +367,7 @@ logic.
 | --- | --- | --- |
 | **Testnet** | `CAPTODBCDEVIK23ALBJBS2TXRTIK47ZA5MBTHYF4XLHG2BK7JPYUCU2Y` | `apps/web/src/demo/demo-trace.generated.ts` |
 | **Testnet Walrus ref contract** | `CC6ROZCIXFTMB47TIWPRKPEHBGI2DSDOONPY47ETVLHUN327EEGJE6UK` | Fresh UI/dev contract with `attach_storage_ref` |
+| **Local GOAT/x402 API** | `POST /goat/agent-decision` | `pnpm goat:test` + `pnpm appraisal:test` |
 | **Mainnet** | `CA7KSDEYJEPGZEB2ZROTLUWKQQ6GIRIQNGG6Z745MZ34QHP4UJPWODEX` | Mainnet proof card in UI; `pnpm mainnet:verify` |
 
 Canonical end-to-end testnet run (agents → x402 → commits → keeper → settle → 0):
@@ -317,7 +376,8 @@ Canonical end-to-end testnet run (agents → x402 → commits → keeper → set
 pnpm agents:e2e
 ```
 
-Other proofs: `pnpm lifecycle:e2e`, `pnpm appraisal:e2e`, `pnpm mainnet:verify`. See README **Proof at a glance**.
+Other proofs: `pnpm lifecycle:e2e`, `pnpm appraisal:e2e`, `pnpm goat:test`,
+`pnpm mainnet:verify`. See README **Proof at a glance**.
 
 The web UI includes a live wallet path for Freighter and RainbowKit route
 selection. The embedded trace remains available for read-only judging, but
@@ -343,6 +403,8 @@ Walrus-backed live rounds require a deployed contract with `attach_storage_ref`.
 | [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md) | Adversaries and mitigations |
 | [docs/DEPLOY.md](./docs/DEPLOY.md) | UI build vs runtime secrets |
 | [docs/DEMO_SCRIPT.md](./docs/DEMO_SCRIPT.md) | 5-minute jury walkthrough |
+| [docs/GOAT_INTEGRATION.md](./docs/GOAT_INTEGRATION.md) | GOAT AgentKit + x402-paid decision flow |
+| [docs/GOAT_DEMO_FLOW.md](./docs/GOAT_DEMO_FLOW.md) | GOAT demo setup and handoff |
 | [docs/TRACK_ANSWERS.md](./docs/TRACK_ANSWERS.md) | Hackathon track mapping |
 | [docs/LIMITATIONS.md](./docs/LIMITATIONS.md) | Honest scope boundaries |
 | [docs/ECOSYSTEM.md](./docs/ECOSYSTEM.md) | Passkey, Smart Account Kit, OZ Relayer |

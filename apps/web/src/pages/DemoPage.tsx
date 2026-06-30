@@ -27,6 +27,8 @@ import {
 import { formatCountdown, useDrandCountdown } from "../hooks/useDrandCountdown";
 import type { StorageReceipt } from "../lib/storageTypes";
 import { getStorageConfigStatus } from "../lib/walrusStorage";
+import { consumePreparedGoatCommitment } from "../lib/goatAgentClient";
+import { decisionBidToDemoEntry } from "../lib/goatDecisionCommitment";
 import { useRoundSession, type ActionStatus } from "../hooks/useRoundSession";
 import { shortAddr } from "../lib/format";
 import { LOGO_SRC } from "../lib/chain";
@@ -754,6 +756,7 @@ function LivePanel({
   const routeLabel = walletRoute === "stellar-walrus" ? "Freighter + Walrus" : "RainbowKit + Bosphor → Walrus";
   const storageConfig = getStorageConfigStatus(walletRoute);
   const activeStorageReceipt = revealStorageReceipt ?? entryStorageReceipt ?? storageReceipt;
+  const [goatPrepared, setGoatPrepared] = useState<ReturnType<typeof consumePreparedGoatCommitment>>(null);
   const evmRoundId = walletRoute === "bosphor-walrus" ? storageReceipt?.intentId || null : null;
   const heroRoundLabel =
     walletRoute === "bosphor-walrus"
@@ -776,6 +779,15 @@ function LivePanel({
     if (!evmRoundId) return;
     await navigator.clipboard.writeText(evmRoundId);
   }
+
+  useEffect(() => {
+    const prepared = consumePreparedGoatCommitment();
+    if (!prepared) return;
+    const entry = decisionBidToDemoEntry(prepared.decision);
+    if (entry == null) return;
+    setEntryValue(entry);
+    setGoatPrepared(prepared);
+  }, [setEntryValue]);
 
   return (
     <>
@@ -861,6 +873,19 @@ function LivePanel({
           </ConnectButton.Custom>
         </div>
       </section>
+
+      {goatPrepared ? (
+        <section className="goat-prefill-banner">
+          <div>
+            <span>GOAT decision loaded</span>
+            <strong>{goatPrepared.bidAmount} USDC prepared for sealed commit</strong>
+            <p>Commitment {shortAddr(goatPrepared.commitmentHash, 8)} is bound to the agent salt.</p>
+          </div>
+          <a className="secondary-action" href="#/goat">
+            Back to GOAT
+          </a>
+        </section>
+      ) : null}
 
       <FlowSteps
         address={activeAccount}

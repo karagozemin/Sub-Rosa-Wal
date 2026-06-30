@@ -8,6 +8,7 @@ Honest boundaries for hackathon submission. No hidden fallbacks.
 | --- | --- | --- |
 | Keeper lifecycle (USDC, 2 bidders) | **Testnet** | `pnpm lifecycle:e2e` |
 | Multi-agent + x402 + UI trace | **Testnet** | `pnpm agents:e2e` |
+| GOAT package + API boundary | **Local/testnet x402 boundary** | `pnpm goat:test`, `pnpm appraisal:test` |
 | Primitive deploy + settle smoke | **Mainnet** | `pnpm mainnet:deploy`, `pnpm mainnet:settle`, `pnpm mainnet:verify` |
 | Optional micro commit | **Mainnet** | `pnpm mainnet:micro` (dry-run default; tiny XLM only) |
 
@@ -24,6 +25,17 @@ Mainnet does **not** replay 700 / 459 USDC demo amounts. Mainnet smoke uses **1 
 - **OpenZeppelin Relayer Channels** — optional SDK submitter; all e2e scripts default to direct Soroban RPC.
 - **Passkey-Kit** — UI demo + ecosystem docs; agents use Ed25519 session keys in this build.
 - **Hosted appraisal API on mainnet** — x402 proof is testnet-only in automated e2e.
+
+## GOAT AgentKit
+
+- `@goatnetwork/agentkit` is installed and wired through `@sub-rosa/goat`.
+- Live GOAT tool execution requires real GOAT credentials/faucet/API access and
+  `GOAT_LIVE_ENABLED=true`.
+- Without those, `POST /goat/agent-decision` marks output as
+  `local_deterministic`. That is useful for schema, x402 boundary, and UI
+  handoff testing, but it is not presented as live GOAT inference.
+- The GOAT decision can prepare a bid amount and commitment payload; the actual
+  sealed commit still uses the existing Sub Rosa route.
 
 ## Walrus storage layer
 

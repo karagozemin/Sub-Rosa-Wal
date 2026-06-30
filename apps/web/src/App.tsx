@@ -4,6 +4,7 @@ import type { UseCaseId } from "./config/useCases";
 import { hashFor, routeFromHash, type RouteState } from "./config/routing";
 import { ArchitecturePage } from "./pages/ArchitecturePage";
 import { DemoPage } from "./pages/DemoPage";
+import { GoatAgentPage } from "./pages/GoatAgentPage";
 import { LandingPage } from "./pages/LandingPage";
 import { StorageLayerPage } from "./pages/StorageLayerPage";
 import { ToastProvider } from "./ui/Toast";
@@ -35,6 +36,8 @@ export default function App() {
         <ArchitecturePage goHome={() => navigate("landing")} />
       ) : route.page === "storage" ? (
         <StorageLayerPage goHome={() => navigate("landing")} goDemo={() => navigate("demo", "grants")} />
+      ) : route.page === "goat" ? (
+        <GoatAgentPage goHome={() => navigate("landing")} goDemo={() => navigate("demo", "grants")} />
       ) : (
         <DemoPage
           active={active}

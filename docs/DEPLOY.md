@@ -8,7 +8,8 @@ Sub Rosa **does not require a committed `.env` file**. Secrets stay out of git; 
 | --- | --- | --- |
 | **Jury UI trace mode** (`apps/web`) | Optional | **Build time** (`VITE_*` baked into static JS) |
 | **Live Walrus-backed UI flow** | Yes | **Build time** (`VITE_*` baked into static JS) |
-| **Keeper / appraisal API** | Yes (secrets) | **Runtime** (shell, systemd, Fly/Railway secrets) |
+| **GOAT agent UI** | Optional public URL | **Build time** (`VITE_GOAT_AGENT_API_URL`) |
+| **Keeper / appraisal / GOAT API** | Yes (secrets) | **Runtime** (shell, systemd, Fly/Railway secrets) |
 | **One-off scripts** (deploy, e2e) | Yes | **Runtime** (inline `VAR=… command` or CI secrets) |
 
 ---
@@ -146,7 +147,37 @@ See root `.env.example` for the full keeper variable list.
 
 ---
 
-## 5. Deploy & settle scripts (runtime, inline)
+## 5. GOAT/x402 agent decisions (runtime secrets)
+
+The `/goat` page is a browser UI, but `POST /goat/agent-decision` runs in
+`services/appraisal-api` and uses the same x402 resource-server pattern as
+`POST /appraise`.
+
+Public browser config:
+
+```bash
+VITE_GOAT_AGENT_API_URL=https://your-appraisal-api.example
+```
+
+Runtime server config:
+
+| Var | Purpose |
+| --- | --- |
+| `FACILITATOR_SECRET` | Signs/submits x402 settle txs |
+| `PAY_TO` | Receives USDC payment |
+| `PAYMENT_ASSET` | SEP-41 token contract |
+| `GOAT_X402_PRICE_USDC` | Price for `POST /goat/agent-decision` |
+| `GOAT_AGENTKIT_API_KEY` / `GOAT_API_KEY` | Live GOAT credentials, if available |
+| `GOAT_LIVE_ENABLED` | Must be `true` before responses claim live GOAT mode |
+| `GOAT_NETWORK` | GOAT network label, default `goat-testnet` |
+
+Without live GOAT credentials and `GOAT_LIVE_ENABLED=true`, the API marks
+decisions as `local_deterministic`. That mode is acceptable for local review of
+schema, x402 boundary, and UI handoff; it is not live GOAT execution.
+
+---
+
+## 6. Deploy & settle scripts (runtime, inline)
 
 Scripts read env at invocation — no `.env` file on disk:
 
@@ -163,7 +194,7 @@ E2E scripts (`lifecycle:e2e`, `agents:e2e`) generate ephemeral keys via Stellar 
 
 ---
 
-## 6. Appraisal API (if you host it)
+## 7. Appraisal API (if you host it)
 
 Runtime env for `pnpm appraisal:start`:
 
@@ -175,7 +206,8 @@ Runtime env for `pnpm appraisal:start`:
 | `PRICE` | Appraisal price (default 0.10) |
 | `PORT` | HTTP port (default 4021) |
 
-Agents point at the public URL via `X402_APPRAISAL_URL` — not baked into the web UI.
+Agents point at the public URL via `X402_APPRAISAL_URL`. The web GOAT page
+points at the same service through `VITE_GOAT_AGENT_API_URL`.
 
 ---
 
@@ -190,6 +222,9 @@ Want live on-chain overlay on the site?
 
 Want live Walrus-backed round creation?
   → set VITE_WALRUS_PUBLISHER_URL or Bosphor vars and use a contract with attach_storage_ref
+
+Want GOAT agent decisions?
+  → run appraisal-api with x402 vars; add GOAT credentials only for live mode
 
 Running keeper 24/7?
   → KEEPER_SECRET + ROUND_CONTRACT_ID on the server (runtime)

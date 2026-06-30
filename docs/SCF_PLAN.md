@@ -57,9 +57,10 @@ Sub Rosa lets applications create a timed sealed round on Soroban:
 The frontend is only the demo layer. The product is the protocol, Soroban
 contract, SDK, keeper service, and integration templates.
 
-Sub Rosa-Wal adds an encrypted Walrus storage layer for heavier round and
-submission metadata. The storage layer is application-routed; Stellar/Soroban
-still owns commitments, reveal, proof references, clearing, and settlement.
+Sub Rosa-Wal adds encrypted Walrus/Bosphor payload storage and GOAT/x402 agent
+actions around heavier round and submission metadata. These layers are
+application-routed; Stellar/Soroban still owns commitments, reveal, proof
+references, clearing, and settlement.
 
 ## Why Stellar
 
@@ -82,6 +83,7 @@ Stellar is a core part of the product, not superficial storage:
 | Walrus storage reference | Testnet/dev | Encrypted metadata stored on Walrus, compact reference attached on Soroban |
 | Full lifecycle | Testnet | `pnpm lifecycle:e2e`: 2 bidders, USDC SAC, settle to 0 |
 | Multi-agent + x402 | Testnet | `pnpm agents:e2e`: x402 appraisal, sealed commits, keeper reveal, settle |
+| GOAT AgentKit | Local/API boundary | `pnpm goat:test`: structured decisions, commitment payloads, honest mode reporting |
 | UI trace | Testnet | Canonical generated trace in `apps/web/src/demo/demo-trace.generated.ts` |
 | Mainnet smoke | Mainnet | Real XLM deployment, BLS open, settle, read-only verify |
 | Keeper | Testnet-ready | Permissionless reveal + watch mode |
@@ -101,6 +103,7 @@ The repository already contains the major components:
 - `services/keeper`: permissionless keeper and watch mode
 - `services/agent`: autonomous bidder proof with mandate caps
 - `services/appraisal-api`: x402-gated appraisal service
+- `packages/goat`: GOAT AgentKit adapter and x402-paid decision schema
 - `apps/web`: live jury demo and canonical trace explorer
 
 SCF support would fund hardening, packaging, docs, pilot integrations, and

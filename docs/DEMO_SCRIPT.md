@@ -2,32 +2,36 @@
 
 Walkthrough for `pnpm web:dev` (default http://localhost:5173).
 
-## Primary narrative: Walrus-backed sealed submissions
+## Primary narrative: sealed coordination stack
 
-Open the demo by framing this repo as the **Sub Rosa Walrus storage layer**,
-not as a generic upload app and not as a replacement for Stellar:
+Open the demo by framing this repo as **Sub Rosa sealed coordination
+infrastructure**, not as a generic upload app and not as a single-chain wallet
+demo:
 
 1. A user creates or joins a sealed Sub Rosa round.
-2. The browser encrypts round/submission metadata before any chain action.
-3. Walrus stores the encrypted payload.
-4. Freighter route attaches a compact Walrus reference to Soroban.
-5. RainbowKit route records a real Bosphor storage intent and uses the
+2. A user or GOAT-powered agent prepares a private bid/evaluation.
+3. x402 gates premium appraisal or agent-decision actions.
+4. The browser encrypts round/submission metadata before any chain action.
+5. Walrus stores the encrypted payload.
+6. Freighter route attaches a compact Walrus reference to Soroban.
+7. RainbowKit route records a real Bosphor storage intent and uses the
    `intentId` as the shareable storage-backed round id.
-6. Drand and Soroban still handle the canonical commit, reveal, proof
+8. Drand and Soroban still handle the canonical commit, reveal, proof
    reference, escrow, and settlement path on the Stellar route.
-7. The organizer can publish a verifiable receipt that separates encrypted
-   payload storage from settlement.
+9. The organizer can publish a verifiable receipt that separates agent
+   reasoning, encrypted payload storage, and settlement.
 
 The current live case proves the sealed-scoring primitive. The recorded
 evidence view proves the contract lifecycle, settlement, and public audit path.
 
-For the Walrus-backed flow, keep the framing tight: Sub Rosa still uses
-Stellar/Soroban for fairness, reveal, proof references, and settlement. Walrus
-stores encrypted heavy metadata only.
+Keep the framing tight: Sub Rosa still uses Stellar/Soroban for fairness,
+reveal, proof references, and settlement. Walrus stores encrypted heavy
+metadata. GOAT/x402 prepares paid agent decisions; it does not replace the
+sealed commit or settlement path.
 
 ## 1. Showcase (30s)
 
-- **Opening:** encrypted Walrus storage for Sub Rosa sealed submissions
+- **Opening:** sealed coordination for private bids, evidence, and agent decisions
 - **Mainnet proof card:** settled round 1 on real XLM (link to stellar.expert)
 - **Drand chip:** live countdown to recorded testnet R (from `demo-trace.generated.ts`)
 
@@ -61,9 +65,17 @@ stores encrypted heavy metadata only.
 - No fake storage: if Walrus/Bosphor config is missing, the action is blocked
   with setup text.
 
-## 4. Agents + x402 (60s)
+## 4. GOAT agents + x402 (60s)
 
-- Position this as supporting proof for the Hack Privacy winning primitive.
+- Open `#/goat` and show the GOAT integration status.
+- Enter a mandate, max bid, max escrow, and risk tolerance.
+- Explain that `POST /goat/agent-decision` is x402-gated; a plain browser call
+  correctly receives HTTP 402 unless a funded paid client signs and retries.
+- When a paid response is available, the output is structured JSON with
+  recommended action, bid amount, confidence, salt, and commitment hash.
+- Click **Use in sealed commitment** to prefill the normal Sub Rosa commit path.
+- Position the existing multi-agent trace as the live testnet proof for the
+  underlying agent/x402/sealed commit lifecycle.
 - Two agents with principals vs session keys
 - x402 log: 0.10 USDC appraisal settled on-chain
 - **Settlement rails panel:** x402 (appraisal) vs SAC settle() (winner prize) — same USDC, different paths
@@ -117,6 +129,7 @@ VITE_WALRUS_PUBLISHER_URL=https://publisher.walrus-testnet.walrus.space
 
 ```bash
 pnpm lifecycle:e2e
+pnpm goat:test
 pnpm agents:e2e
 pnpm mainnet:verify
 pnpm keeper:watch
@@ -126,6 +139,8 @@ pnpm keeper:watch
 
 - [TECH_DESIGN.md](./TECH_DESIGN.md)
 - [WALRUS_STORAGE.md](./WALRUS_STORAGE.md)
+- [GOAT_INTEGRATION.md](./GOAT_INTEGRATION.md)
+- [GOAT_DEMO_FLOW.md](./GOAT_DEMO_FLOW.md)
 - [THREAT_MODEL.md](./THREAT_MODEL.md)
 - [TRACK_ANSWERS.md](./TRACK_ANSWERS.md)
 - [ECOSYSTEM.md](./ECOSYSTEM.md)

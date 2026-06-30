@@ -31,6 +31,8 @@
     "appraisal:typecheck": "pnpm --filter @sub-rosa/appraisal-api typecheck",
     "appraisal:start": "pnpm --filter @sub-rosa/appraisal-api start",
     "appraisal:e2e": "bash services/appraisal-api/scripts/x402-e2e.sh",
+    "goat:test": "pnpm --filter @sub-rosa/goat test",
+    "goat:typecheck": "pnpm --filter @sub-rosa/goat typecheck",
     "agent:test": "pnpm --filter @sub-rosa/agent test",
     "agent:typecheck": "pnpm --filter @sub-rosa/agent typecheck",
     "agents:e2e": "bash services/agent/scripts/agents-e2e.sh",

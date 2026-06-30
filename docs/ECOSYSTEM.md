@@ -1,6 +1,10 @@
 # Ecosystem Integration — Passkey, Relayer, Scaffold
 
-Sub Rosa's live path uses **Ed25519 session keys + signed mandates** and **direct Soroban RPC**. It also ships optional ecosystem adapters that do not change the core protocol: Passkey-Kit in the web wallet panel, and OpenZeppelin Relayer Channels as an SDK submitter.
+Sub Rosa's live path uses **Ed25519 session keys + signed mandates** and
+**direct Soroban RPC**. It also ships optional ecosystem adapters that do not
+change the core protocol: Passkey-Kit in the web wallet panel, OpenZeppelin
+Relayer Channels as an SDK submitter, and GOAT AgentKit for x402-paid agent
+decisions.
 
 ## Authorization model mapping
 
@@ -11,6 +15,7 @@ Sub Rosa's live path uses **Ed25519 session keys + signed mandates** and **direc
 | Signed mandate JSON | Smart Account spending limit + contract allowlist |
 | Agent verifies caps off-chain | Wallet policy + agent double-check |
 | Session signs commit + x402 | Session signer submits via RPC or relayer |
+| GOAT agent decision | Policy-scoped AI agent action before commit |
 
 The **mandate** is the off-chain stand-in for what Smart Account Kit encodes as **context rules** and **spending limits**.
 
@@ -68,7 +73,20 @@ Sub Rosa ships a **custom jury UI** (`apps/web`) rather than Scaffold, but the s
 
 ## x402 + SAC alignment
 
-Both appraisal (x402) and prize settlement (`settle()`) use **SEP-41 tokens** — USDC on testnet, native XLM SAC on mainnet smoke. x402 is HTTP-gated micro-payment; settle is contract SAC transfer. See `docs/TECH_DESIGN.md`.
+Appraisal and GOAT agent decisions use **x402** as HTTP-gated
+micro-payments. Prize settlement uses contract `settle()` over SAC transfers.
+On testnet the payment/settlement asset is USDC; mainnet smoke uses native XLM
+SAC. See `docs/TECH_DESIGN.md`.
+
+## GOAT AgentKit
+
+- npm: `@goatnetwork/agentkit`
+- Local package: `packages/goat`
+- API surface: `POST /goat/agent-decision`, protected by x402
+
+GOAT AgentKit is treated as an agent runtime boundary, not as the settlement
+layer. Live GOAT tool execution requires credentials/faucet/API access; local
+deterministic mode is labeled in the response for review and UI testing.
 
 ## Links
 
@@ -80,3 +98,4 @@ Both appraisal (x402) and prize settlement (`settle()`) use **SEP-41 tokens** �
 | OZ Relayer Stellar guide | https://docs.openzeppelin.com/relayer/1.3.x/guides/stellar-channels-guide |
 | Drand quicknet | https://drand.love |
 | x402 Stellar | https://github.com/coinbase/x402 |
+| GOAT AgentKit | https://github.com/GOATNetwork/agentkit |

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^15.1.0",
+    "@sub-rosa/goat": "workspace:*",
     "@x402/core": "^2.14.0",
     "@x402/stellar": "^2.11.0"
   },

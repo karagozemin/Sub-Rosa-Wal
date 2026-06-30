@@ -2,17 +2,17 @@
 
 ## Architecture
 
-See [ARCHITECTURE.md](../ARCHITECTURE.md) for the system overview. This document covers cryptography, storage, and settlement detail.
+See [ARCHITECTURE.md](../ARCHITECTURE.md) for the system overview. This document covers cryptography, storage, agent decisions, payment rails, and settlement detail.
 
 ## Overview
 
 Sub Rosa is a **sealed commit–reveal coordination primitive** on Stellar Soroban. Participants lock escrow and submit timelock-encrypted bids; a public Drand round R forces simultaneous decryption; the contract clears and settles deterministically.
 
-The Walrus layer does not replace Stellar. Before important round/submission
-actions, the app encrypts heavier metadata client-side and stores it through the
-configured Walrus route. On the Stellar route, Soroban receives only compact
-proof/reference fields. On the EVM route, Bosphor records storage intents and
-the Stellar settlement path remains separate.
+Walrus, Bosphor, x402, and GOAT do not replace Stellar. Before important
+round/submission actions, the app encrypts heavier metadata client-side and
+stores it through the configured Walrus route. GOAT/x402 can prepare a paid
+agent decision before commit. Soroban still receives the compact references and
+executes the sealed lifecycle.
 
 ## Architecture
 
@@ -20,20 +20,20 @@ the Stellar settlement path remains separate.
                          apps/web
              client encryption + active route selection
                               │
-        ┌─────────────────────┴─────────────────────┐
-        │                                           │
-        ▼                                           ▼
- Freighter / Stellar route                  RainbowKit / EVM route
-        │                                           │
-        ▼                                           ▼
- Walrus publisher                           BosphorAdapter
- blobId + endEpoch                          IntentSubmitted(intentId)
-        │                                           │
-        ▼                                           ▼
- Round contract                             Bosphor round id
- create_round                               join by intentId
- attach_storage_ref                         commit/reveal metadata intents
- commit / reveal / settle                   storage-only route
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+        ▼                     ▼                     ▼
+ GOAT / x402 route     Freighter route       RainbowKit route
+        │              Stellar wallet        EVM wallet
+        ▼                     │                     │
+ agent decision              ▼                     ▼
+ salt + H             Walrus publisher       BosphorAdapter
+        │              blobId + epoch        IntentSubmitted
+        └──────────────┬──────┴─────────────┬──────┘
+                       ▼                    ▼
+              Round contract          Bosphor round id
+              create/attach/commit    storage-only join id
+              reveal/clear/settle     metadata intents
 ```
 
 The left route is the full Stellar/Soroban Sub Rosa lifecycle. The right route
@@ -50,6 +50,7 @@ sign Soroban settlement transactions.
 | `services/keeper` | Permissionless open/reveal/clear/settle (+ watch mode) |
 | `services/appraisal-api` | x402-gated appraisal (SEP-41 USDC) |
 | `services/agent` | Multi-agent bidders with session mandates |
+| `packages/goat` | GOAT AgentKit adapter, decision schema, commitment payload generation |
 | `apps/web` | Jury demo UI, wallet routes, client encryption, Walrus receipt status |
 
 ## Cryptography
@@ -83,6 +84,17 @@ sign Soroban settlement transactions.
 ### On-chain BLS
 
 Deploy constants validated via `services/drand-tools` against live quicknet. Contract rejects wrong-round signatures and malformed G1 points.
+
+### GOAT agent decision payloads
+
+- Request validation uses Zod schemas in `packages/goat`.
+- `POST /goat/agent-decision` is x402-gated before output is returned.
+- Output includes `recommendedAction`, `bidAmount`, `confidence`,
+  `riskNotes`, and a `commitmentPayload`.
+- `commitmentPayload.commitmentHash` is generated with the same Sub Rosa
+  commitment encoding used by `packages/tlock`.
+- Every response reports `goat.mode`: `live` only when credentials and
+  `GOAT_LIVE_ENABLED=true` are present, otherwise `local_deterministic`.
 
 ## Storage model
 
@@ -140,7 +152,7 @@ Bosphor adapter state.
 
 Two **SEP-41 token** paths on testnet (USDC SAC):
 
-1. **x402** — agent → appraisal server micro-payment (HTTP 402, signed auth entry, facilitator settles on RPC). Used for **appraisal only**. Testnet-only in automated e2e.
+1. **x402** — agent/user → resource server micro-payment (HTTP 402, signed auth entry, facilitator settles on RPC). Used for appraisal and GOAT agent decisions. Testnet-only in automated e2e.
 2. **SAC `settle()`** — contract transfers winner escrow → operator; refunds losers. Used for **prize settlement**. Not x402.
 
 Same asset rail on a given network (USDC on testnet); authorization differs. Mainnet smoke uses **native XLM SAC**, not USDC — see `docs/LIMITATIONS.md`.
@@ -175,6 +187,7 @@ If the submitter is absent, the SDK signs and submits exactly as before. If pres
 pnpm lifecycle:e2e    # full round, 2 bidders, USDC SAC
 pnpm agents:e2e       # multi-agent + x402 + keeper → single UI trace
 pnpm appraisal:e2e    # x402 appraisal settle
+pnpm goat:test         # GOAT decision schema + commitment payload
 pnpm keeper:e2e       # permissionless reveal
 pnpm sdk:smoke        # deploy + commit smoke
 pnpm mainnet:deploy   # mainnet wasm + round

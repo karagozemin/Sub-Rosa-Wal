@@ -10,6 +10,8 @@ export interface AppraisalServerConfig {
   asset: string;
   /** Price per call, decimal units of the asset (e.g. 0.10). */
   price: number;
+  /** Price for the GOAT-powered agent decision endpoint. Defaults to `price`. */
+  goatPrice?: number;
   /** CAIP-2 network id. */
   network: Network;
   /** Optional custom Soroban RPC URL. */
@@ -30,6 +32,7 @@ export function configFromEnv(): AppraisalServerConfig {
     payTo: reqEnv("PAY_TO"),
     asset: process.env.PAYMENT_ASSET ?? USDC_TESTNET_ADDRESS,
     price: Number(process.env.PRICE ?? "0.10"),
+    goatPrice: Number(process.env.GOAT_X402_PRICE_USDC ?? process.env.PRICE ?? "0.10"),
     network: (process.env.X402_NETWORK ?? "stellar:testnet") as Network,
     rpcUrl: process.env.RPC_URL,
     port: Number(process.env.PORT ?? "4021"),

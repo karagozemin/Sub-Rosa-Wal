@@ -1,0 +1,22 @@
+{
+  "name": "@sub-rosa/goat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GOAT AgentKit integration for x402-paid Sub Rosa agent decisions and sealed commitment payloads.",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "node --import tsx --test src/goat.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@goatnetwork/agentkit": "^0.2.2",
+    "@sub-rosa/tlock": "workspace:*",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}

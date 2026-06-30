@@ -48,6 +48,7 @@ export function LandingPage({
           <span className="landing-status-pill winner">Hack Privacy #1</span>
           <span className="landing-status-pill">testnet · live</span>
           <a href="#/storage">Walrus layer</a>
+          <a href="#/goat">GOAT agents</a>
           <a href="https://github.com/karagozemin/Sub-Rosa-Wal" target="_blank" rel="noreferrer">
             GitHub
           </a>

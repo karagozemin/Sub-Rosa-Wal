@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import type { AddressInfo } from "node:net";
 import { test } from "node:test";
+import { Keypair } from "@stellar/stellar-sdk";
 
 import {
   APPRAISAL_MODEL,
@@ -8,6 +10,7 @@ import {
   inputsHash,
   parseAppraisalRequest,
 } from "./appraisal.js";
+import { buildAppraisalServer } from "./server.js";
 
 test("appraisal is deterministic — identical inputs give identical output", () => {
   const req = {
@@ -84,4 +87,53 @@ test("parseAppraisalRequest validates and clamps", () => {
   });
   assert.equal(parsed.attributes?.quality, 100);
   assert.equal(parsed.attributes?.risk, 0);
+});
+
+test("GOAT agent decision endpoint requires x402 payment before returning output", async () => {
+  const server = await buildAppraisalServer({
+    facilitatorSecret: Keypair.random().secret(),
+    payTo: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+    asset: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXC6DGY6D6QGNVO5QV63UEK2B",
+    price: 0.1,
+    goatPrice: 0.12,
+    network: "stellar:testnet",
+    port: 0,
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.equal(typeof address, "object");
+    const port = (address as AddressInfo).port;
+    const res = await fetch(`http://127.0.0.1:${port}/goat/agent-decision`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        agentId: "goat-alpha",
+        round: {
+          roundId: "42",
+          itemRef: "sub-rosa://round/42",
+          basePrice: 100,
+          category: "rfp",
+        },
+        mandate: {
+          objective: "Prepare a sealed bid only if it stays inside the cap.",
+          maxBid: 90,
+          maxEscrow: 95,
+          riskTolerance: "medium",
+        },
+      }),
+    });
+    assert.equal(res.status, 402);
+    const paymentRequired = res.headers.get("payment-required");
+    assert.ok(paymentRequired);
+    const decoded = JSON.parse(Buffer.from(paymentRequired, "base64").toString("utf8")) as {
+      accepts?: Array<{ payTo?: string; amount?: string }>;
+    };
+    assert.equal(decoded.accepts?.[0]?.payTo, "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5");
+    assert.equal(decoded.accepts?.[0]?.amount, "1200000");
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((err) => (err ? reject(err) : resolve())),
+    );
+  }
 });

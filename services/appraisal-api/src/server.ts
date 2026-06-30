@@ -32,11 +32,30 @@ import {
 } from "@x402/stellar";
 import { ExactStellarScheme as FacilitatorStellarScheme } from "@x402/stellar/exact/facilitator";
 import { ExactStellarScheme as ServerStellarScheme } from "@x402/stellar/exact/server";
+import {
+  generateAgentDecision,
+  goatAgentDecisionRequestSchema,
+  getGoatIntegrationStatus,
+  requireX402Payment,
+} from "@sub-rosa/goat";
 
 import { appraise, AppraisalInputError, parseAppraisalRequest } from "./appraisal.js";
 import type { AppraisalServerConfig } from "./config.js";
 
 const APPRAISE_ROUTE = "POST /appraise";
+const GOAT_DECISION_ROUTE = "POST /goat/agent-decision";
+
+const goatPrice = (config: AppraisalServerConfig): number => config.goatPrice ?? config.price;
+
+function isZodLikeError(
+  e: unknown,
+): e is { issues: Array<{ path: Array<string | number>; message: string }> } {
+  return Boolean(
+    e &&
+      typeof e === "object" &&
+      Array.isArray((e as { issues?: unknown }).issues),
+  );
+}
 
 function readBody(req: http.IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -138,6 +157,17 @@ export async function buildAppraisalServer(
       mimeType: "application/json",
       serviceName: "sub-rosa-appraisal",
     },
+    [GOAT_DECISION_ROUTE]: {
+      accepts: {
+        scheme: "exact",
+        payTo: config.payTo,
+        price: goatPrice(config),
+        network: config.network,
+      },
+      description: "GOAT-powered Sub Rosa agent decision (structured sealed-bid strategy)",
+      mimeType: "application/json",
+      serviceName: "sub-rosa-goat-agent",
+    },
   };
 
   const httpServer = new x402HTTPResourceServer(resourceServer, routes);
@@ -155,9 +185,22 @@ export async function buildAppraisalServer(
         return send(res, 200, {}, {
           service: "sub-rosa-appraisal",
           pay: APPRAISE_ROUTE,
+          goat: GOAT_DECISION_ROUTE,
           asset: config.asset,
           price: config.price,
+          goatPrice: goatPrice(config),
           network: config.network,
+        });
+      }
+      if (method === "GET" && url.pathname === "/goat/status") {
+        return send(res, 200, {}, {
+          service: "sub-rosa-goat-agent",
+          status: getGoatIntegrationStatus(),
+          x402: requireX402Payment({
+            receiverAddress: config.payTo,
+            network: config.network,
+            priceUsdc: goatPrice(config),
+          }),
         });
       }
 
@@ -193,10 +236,29 @@ export async function buildAppraisalServer(
       // malformed body never costs the caller.
       let body: unknown;
       try {
-        body = { appraisal: appraise(parseAppraisalRequest(parsedBody)) };
+        if (method === "POST" && url.pathname === "/appraise") {
+          body = { appraisal: appraise(parseAppraisalRequest(parsedBody)) };
+        } else if (method === "POST" && url.pathname === "/goat/agent-decision") {
+          body = {
+            decision: generateAgentDecision(
+              goatAgentDecisionRequestSchema.parse(parsedBody),
+            ),
+          };
+        } else {
+          return send(res, 404, {}, { error: "not found" });
+        }
       } catch (e) {
         if (e instanceof AppraisalInputError) {
           return send(res, 400, {}, { error: e.message });
+        }
+        if (isZodLikeError(e)) {
+          return send(res, 400, {}, {
+            error: "invalid GOAT agent decision request",
+            issues: e.issues.map((issue) => ({
+              path: issue.path.join("."),
+              message: issue.message,
+            })),
+          });
         }
         throw e;
       }

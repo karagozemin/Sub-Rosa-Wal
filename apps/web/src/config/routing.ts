@@ -1,7 +1,7 @@
 import type { UseCaseId } from "./useCases";
 import { USE_CASES } from "./useCases";
 
-export type Page = "landing" | "demo" | "architecture" | "storage";
+export type Page = "landing" | "demo" | "architecture" | "storage" | "goat";
 
 export interface RouteState {
   page: Page;
@@ -21,6 +21,9 @@ export function routeFromHash(): RouteState {
   if (parts[0] === "storage" || parts[0] === "walrus") {
     return { page: "storage", useCase: "grants" };
   }
+  if (parts[0] === "goat" || parts[0] === "agents") {
+    return { page: "goat", useCase: "grants" };
+  }
   if (parts[0] === "demo" || parts[0] === "app") {
     const maybeCase = parts[1];
     const useCase = USE_CASES.some((item) => item.id === maybeCase)
@@ -36,5 +39,6 @@ export function hashFor(page: Page, useCase: UseCaseId = "grants"): string {
   if (page === "landing") return "#/landing";
   if (page === "architecture") return "#/architecture";
   if (page === "storage") return "#/storage";
+  if (page === "goat") return "#/goat";
   return `#/demo/${useCase}`;
 }

@@ -2,8 +2,8 @@
 
 Sub Rosa does not require users to come to the Sub Rosa demo app. The demo app
 is a showcase. The intended product surface is a Soroban contract, TypeScript
-packages, and an application-layer Walrus storage route that other apps can
-embed.
+packages, an application-layer Walrus storage route, and optional GOAT/x402
+agent actions that other apps can embed.
 
 ## Target integration
 
@@ -16,7 +16,7 @@ to npm is a release step, not a protocol requirement.
 
 ## What an app integrates
 
-An integrating app usually needs five pieces:
+An integrating app usually needs five pieces, with a sixth optional agent layer:
 
 | Piece | Role |
 | --- | --- |
@@ -25,6 +25,7 @@ An integrating app usually needs five pieces:
 | `@sub-rosa/tlock` | Seals values to Drand R and opens ciphertext after R |
 | Walrus storage route | Stores encrypted heavy metadata/submission payloads before the Soroban action |
 | Keeper | Opens reveal and settles when Drand R is live; permissionless by design |
+| GOAT/x402 agent action | Optional paid decision/evaluation flow that returns structured bid input |
 
 Walrus is not the transaction layer. Stellar/Soroban remains responsible for
 round lifecycle, proof references, reveal, clearing, escrow, and settlement.
@@ -80,12 +81,37 @@ await client.commit({
 After Drand round `R` is published, any keeper or participant can submit the
 Drand signature, reveal valid entries, clear the round, and settle escrow.
 
+## Optional GOAT agent flow
+
+Apps that want autonomous participants can call the x402-gated GOAT endpoint
+before `commit`:
+
+```ts
+const res = await paidFetch("/goat/agent-decision", {
+  method: "POST",
+  body: JSON.stringify({
+    agentId,
+    decisionType: "sealed_bid",
+    round: { roundId, itemRef, basePrice },
+    mandate: { objective, maxBid, maxEscrow, riskTolerance },
+  }),
+});
+
+const { bidAmount, commitmentPayload } = res.body.decision;
+```
+
+The returned `commitmentPayload` can be shown to the user, stored as encrypted
+evidence through Walrus/Bosphor, or used to prefill the normal Sub Rosa sealed
+commit flow. Live GOAT tool execution requires real GOAT credentials; without
+them, the API marks output as `local_deterministic`.
+
 ## Wallet routes
 
 | Route | Wallet | What it signs | Shareable id |
 | --- | --- | --- | --- |
 | Stellar route | Freighter | Soroban `create_round`, `attach_storage_ref`, commit, reveal, settle | Numeric Soroban `round_id` |
 | EVM route | RainbowKit / wagmi | Bosphor round metadata, sealed entry, and reveal metadata storage intents | Bosphor round `intentId` |
+| GOAT route | Backend paid agent client | x402-paid `POST /goat/agent-decision` | Commitment hash / decision artifact |
 
 Freighter cannot sign Bosphor EVM transactions. RainbowKit/EVM wallets cannot
 sign Soroban transactions. If an app offers both routes, keep them explicit so
