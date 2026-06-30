@@ -1,0 +1,11 @@
+.git
+node_modules
+target
+artifacts
+tmp-bindings
+apps/web/dist
+outputs
+*.log
+.env
+**/.env
+**/.env.local
