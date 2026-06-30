@@ -12,6 +12,8 @@ export interface AppraisalServerConfig {
   price: number;
   /** Price for the GOAT-powered agent decision endpoint. Defaults to `price`. */
   goatPrice?: number;
+  /** Optional demo payer. When present, /goat/paid-agent-decision pays the x402 route server-side. */
+  goatDemoPayerSecret?: string;
   /** CAIP-2 network id. */
   network: Network;
   /** Optional custom Soroban RPC URL. */
@@ -33,6 +35,7 @@ export function configFromEnv(): AppraisalServerConfig {
     asset: process.env.PAYMENT_ASSET ?? USDC_TESTNET_ADDRESS,
     price: Number(process.env.PRICE ?? "0.10"),
     goatPrice: Number(process.env.GOAT_X402_PRICE_USDC ?? process.env.PRICE ?? "0.10"),
+    goatDemoPayerSecret: process.env.GOAT_DEMO_PAYER_SECRET,
     network: (process.env.X402_NETWORK ?? "stellar:testnet") as Network,
     rpcUrl: process.env.RPC_URL,
     port: Number(process.env.PORT ?? "4021"),

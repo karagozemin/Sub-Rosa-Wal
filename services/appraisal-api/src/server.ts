@@ -40,10 +40,12 @@ import {
 } from "@sub-rosa/goat";
 
 import { appraise, AppraisalInputError, parseAppraisalRequest } from "./appraisal.js";
+import { createPaidFetch } from "./client.js";
 import type { AppraisalServerConfig } from "./config.js";
 
 const APPRAISE_ROUTE = "POST /appraise";
 const GOAT_DECISION_ROUTE = "POST /goat/agent-decision";
+const GOAT_PAID_DEMO_ROUTE = "POST /goat/paid-agent-decision";
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET,POST,OPTIONS",
@@ -198,6 +200,7 @@ export async function buildAppraisalServer(
           service: "sub-rosa-appraisal",
           pay: APPRAISE_ROUTE,
           goat: GOAT_DECISION_ROUTE,
+          goatPaidDemo: GOAT_PAID_DEMO_ROUTE,
           asset: config.asset,
           price: config.price,
           goatPrice: goatPrice(config),
@@ -213,6 +216,10 @@ export async function buildAppraisalServer(
             network: config.network,
             priceUsdc: goatPrice(config),
           }),
+          paidDemo: {
+            available: Boolean(config.goatDemoPayerSecret),
+            route: GOAT_PAID_DEMO_ROUTE,
+          },
         });
       }
 
@@ -224,6 +231,41 @@ export async function buildAppraisalServer(
         } catch {
           return send(res, 400, {}, { error: "invalid JSON body" });
         }
+      }
+
+      if (method === "POST" && url.pathname === "/goat/paid-agent-decision") {
+        if (!config.goatDemoPayerSecret) {
+          return send(res, 503, {}, {
+            error: "GOAT_DEMO_PAYER_SECRET is not configured on this backend.",
+          });
+        }
+        const request = goatAgentDecisionRequestSchema.parse(parsedBody);
+        const paidFetch = createPaidFetch({
+          secret: config.goatDemoPayerSecret,
+          network: config.network,
+          rpcUrl: config.rpcUrl,
+        });
+        const targetUrl = new URL(
+          "/goat/agent-decision",
+          `http://127.0.0.1:${config.port}`,
+        );
+        const result = await paidFetch<{
+          decision: ReturnType<typeof generateAgentDecision>;
+          payment: { transaction: string; network: string; payer: string };
+        }>(targetUrl.toString(), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(request),
+        });
+        return send(res, result.status, {}, {
+          ...result.body,
+          settlement: result.settlement,
+          paidAgent: {
+            route: GOAT_PAID_DEMO_ROUTE,
+            paidProtectedRoute: GOAT_DECISION_ROUTE,
+            note: "Demo relay paid the same x402-protected GOAT endpoint with a funded Stellar testnet payer.",
+          },
+        });
       }
 
       const adapter = makeAdapter(req, url, parsedBody);

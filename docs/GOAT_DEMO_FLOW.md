@@ -81,24 +81,23 @@ Click `Generate paid decision`.
 
 The UI has two honest states:
 
-- Without a browser payer secret, the endpoint returns HTTP 402 and the right
+- Without the backend paid relay, the endpoint returns HTTP 402 and the right
   panel shows the payment checkpoint: price, receiver, network, and endpoint.
   That is expected and proves the endpoint is not bypassing payment.
-- With a funded Stellar testnet payer configured, the browser signs the x402
-  payment, retries the same protected endpoint, shows the settlement receipt,
-  and renders the structured GOAT decision.
+- With `GOAT_DEMO_PAYER_SECRET` configured on the backend, the browser calls
+  `POST /goat/paid-agent-decision`; the backend pays the same protected
+  `POST /goat/agent-decision` endpoint, shows the settlement receipt, and
+  renders the structured GOAT decision.
 
-For a one-click paid browser demo, set these Vercel/local web build variables:
+For a one-click paid demo, set this on the backend:
 
 ```bash
-VITE_GOAT_AGENT_API_URL=https://your-app.ondigitalocean.app
-VITE_GOAT_PAYER_SECRET=S...
-VITE_GOAT_RPC_URL=https://soroban-testnet.stellar.org
+GOAT_DEMO_PAYER_SECRET=S...
 ```
 
-`VITE_GOAT_PAYER_SECRET` is demo-only and must be a funded testnet payer with a
+`GOAT_DEMO_PAYER_SECRET` is demo-only and must be a funded testnet payer with a
 USDC trustline/balance for the backend's `PAYMENT_ASSET`. Do not use a
-production or valuable wallet secret in a public frontend build.
+production or valuable wallet secret for this public demo relay.
 
 You can also keep secrets out of the browser and run a paid agent client from
 Node, following `services/appraisal-api/src/client.ts`.

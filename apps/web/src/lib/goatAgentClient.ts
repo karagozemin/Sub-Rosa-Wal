@@ -1,12 +1,6 @@
 export const GOAT_AGENT_API_URL =
   import.meta.env.VITE_GOAT_AGENT_API_URL ?? "http://127.0.0.1:4021";
 
-export const GOAT_PAYER_SECRET =
-  import.meta.env.VITE_GOAT_PAYER_SECRET?.trim() ?? "";
-
-export const GOAT_RPC_URL =
-  import.meta.env.VITE_GOAT_RPC_URL?.trim() ?? "https://soroban-testnet.stellar.org";
-
 export type GoatDecisionRequest = {
   agentId: string;
   decisionType: "sealed_bid" | "evaluation" | "negotiation";
@@ -80,6 +74,10 @@ export type GoatStatus = {
     priceUsdc: number;
     route: "POST /goat/agent-decision";
   };
+  paidDemo?: {
+    available: boolean;
+    route: "POST /goat/paid-agent-decision";
+  };
 };
 
 export type GoatPaymentRequirement = {
@@ -142,66 +140,19 @@ export async function requestGoatDecision(
 
 export async function requestPaidGoatDecision(
   request: GoatDecisionRequest,
-  payerSecret = GOAT_PAYER_SECRET,
 ): Promise<GoatPaidDecision> {
-  if (!payerSecret) {
-    throw new Error(
-      "Missing VITE_GOAT_PAYER_SECRET. Add a funded Stellar testnet payer secret to run the real paid browser demo.",
-    );
-  }
-
-  const [{ x402Client, x402HTTPClient }, { createEd25519Signer }, { ExactStellarScheme }] =
-    await Promise.all([
-      import("@x402/core/client"),
-      import("@x402/stellar"),
-      import("@x402/stellar/exact/client"),
-    ]);
-
-  const network = "stellar:testnet";
-  const signer = createEd25519Signer(payerSecret, network);
-  const core = new x402Client().register(
-    "stellar:*",
-    new ExactStellarScheme(signer, { url: GOAT_RPC_URL }),
-  );
-  const http = new x402HTTPClient(core);
-  const url = `${GOAT_AGENT_API_URL.replace(/\/$/, "")}/goat/agent-decision`;
-  const init: RequestInit = {
+  const res = await fetch(`${GOAT_AGENT_API_URL.replace(/\/$/, "")}/goat/paid-agent-decision`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(request),
-  };
-
-  const first = await fetch(url, init);
-  if (first.status !== 402) {
-    const body = (await first.json().catch(() => ({}))) as {
-      decision?: GoatDecision;
-      payment?: GoatPaymentReceipt;
-      error?: string;
-    };
-    if (!first.ok || !body.decision) {
-      throw new Error(body.error ?? `GOAT decision failed with HTTP ${first.status}`);
-    }
-    return { decision: body.decision, payment: body.payment };
-  }
-
-  const paymentRequiredBody = await first.clone().json().catch(() => undefined);
-  const paymentRequired = http.getPaymentRequiredResponse(
-    (name: string) => first.headers.get(name),
-    paymentRequiredBody,
-  );
-  const payload = await http.createPaymentPayload(paymentRequired);
-  const paymentHeaders = http.encodePaymentSignatureHeader(payload);
-  const paid = await fetch(url, {
-    ...init,
-    headers: { ...(init.headers ?? {}), ...paymentHeaders },
   });
-  const body = (await paid.json().catch(() => ({}))) as {
+  const body = (await res.json().catch(() => ({}))) as {
     decision?: GoatDecision;
     payment?: GoatPaymentReceipt;
     error?: string;
   };
-  if (!paid.ok || !body.decision) {
-    throw new Error(body.error ?? `paid GOAT decision failed with HTTP ${paid.status}`);
+  if (!res.ok || !body.decision) {
+    throw new Error(body.error ?? `paid GOAT decision failed with HTTP ${res.status}`);
   }
   return { decision: body.decision, payment: body.payment };
 }

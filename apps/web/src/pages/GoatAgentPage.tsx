@@ -4,7 +4,6 @@ import {
   fetchGoatStatus,
   GoatPaymentRequiredError,
   GOAT_AGENT_API_URL,
-  GOAT_PAYER_SECRET,
   requestPaidGoatDecision,
   requestGoatDecision,
   savePreparedGoatCommitment,
@@ -55,7 +54,7 @@ export function GoatAgentPage({ goHome, goDemo }: Props) {
     () => (decision ? decisionBidToDemoEntry(decision) : null),
     [decision],
   );
-  const canPayInBrowser = GOAT_PAYER_SECRET.length > 0;
+  const paidRelayAvailable = status?.paidDemo?.available === true;
 
   useEffect(() => {
     fetchGoatStatus().then(setStatus).catch((e) => {
@@ -69,9 +68,9 @@ export function GoatAgentPage({ goHome, goDemo }: Props) {
     setDecision(null);
     setPayment(null);
     setPaymentRequirement(null);
-    setStage(canPayInBrowser ? "signing" : "checking");
+    setStage(paidRelayAvailable ? "signing" : "checking");
     try {
-      const result = canPayInBrowser
+      const result = paidRelayAvailable
         ? await requestPaidGoatDecision(request)
         : await requestGoatDecision(request);
       setDecision(result.decision);
@@ -301,10 +300,10 @@ export function GoatAgentPage({ goHome, goDemo }: Props) {
             <PaymentCheckpoint
               requirement={paymentRequirement}
               status={status}
-              canPayInBrowser={canPayInBrowser}
+              paidRelayAvailable={paidRelayAvailable}
             />
           ) : (
-            <LaunchState status={status} canPayInBrowser={canPayInBrowser} busy={busy} />
+            <LaunchState status={status} paidRelayAvailable={paidRelayAvailable} busy={busy} />
           )}
         </motion.aside>
       </section>
@@ -336,24 +335,24 @@ function ResultHeader({
 
 function LaunchState({
   status,
-  canPayInBrowser,
+  paidRelayAvailable,
   busy,
 }: {
   status: GoatStatus | null;
-  canPayInBrowser: boolean;
+  paidRelayAvailable: boolean;
   busy: boolean;
 }) {
   return (
     <div className="goat-empty-state">
       <div className="goat-steps" aria-label="GOAT paid decision progress">
         <Step done label="Backend online" value={status ? status.x402.network : "checking"} />
-        <Step done={canPayInBrowser} label="Payer wallet" value={canPayInBrowser ? "loaded" : "not in browser"} />
+        <Step done={paidRelayAvailable} label="Paid relay" value={paidRelayAvailable ? "funded" : "not configured"} />
         <Step done={busy} label="x402 request" value={busy ? "running" : "ready"} />
       </div>
       <p>
-        Press generate to hit the protected GOAT endpoint. With a funded payer secret configured,
-        the browser signs the x402 payment, settles on Stellar testnet, then shows the transaction
-        and prepared sealed-bid commitment here.
+        Press generate to trigger the paid GOAT relay. The backend pays the same x402-protected
+        agent endpoint with a funded Stellar testnet payer, then returns the transaction and
+        prepared sealed-bid commitment here.
       </p>
     </div>
   );
@@ -362,11 +361,11 @@ function LaunchState({
 function PaymentCheckpoint({
   requirement,
   status,
-  canPayInBrowser,
+  paidRelayAvailable,
 }: {
   requirement: GoatPaymentRequirement;
   status: GoatStatus | null;
-  canPayInBrowser: boolean;
+  paidRelayAvailable: boolean;
 }) {
   const api = GOAT_AGENT_API_URL.replace(/\/$/, "");
   return (
@@ -398,9 +397,9 @@ function PaymentCheckpoint({
         </div>
       </dl>
       <div className="goat-terminal">
-        {canPayInBrowser
-          ? "Payer key is configured. Click Generate again to sign + settle from the browser."
-          : "Add VITE_GOAT_PAYER_SECRET with a funded Stellar testnet payer, then redeploy Vercel for one-click paid decisions."}
+        {paidRelayAvailable
+          ? "Paid relay is configured. Click Generate again to settle the protected x402 route server-side."
+          : "Configure GOAT_DEMO_PAYER_SECRET on the backend to enable one-click paid decisions."}
       </div>
     </div>
   );
