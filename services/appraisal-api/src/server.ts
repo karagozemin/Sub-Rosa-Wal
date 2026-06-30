@@ -44,6 +44,12 @@ import type { AppraisalServerConfig } from "./config.js";
 
 const APPRAISE_ROUTE = "POST /appraise";
 const GOAT_DECISION_ROUTE = "POST /goat/agent-decision";
+const CORS_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET,POST,OPTIONS",
+  "access-control-allow-headers": "content-type,x-payment",
+  "access-control-expose-headers": "payment-required,x-payment-response",
+};
 
 const goatPrice = (config: AppraisalServerConfig): number => config.goatPrice ?? config.price;
 
@@ -96,7 +102,7 @@ function send(
 ) {
   const payload =
     typeof body === "string" ? body : JSON.stringify(body ?? {}, null, 2);
-  res.writeHead(status, { "content-type": "application/json", ...headers });
+  res.writeHead(status, { "content-type": "application/json", ...CORS_HEADERS, ...headers });
   res.end(payload);
 }
 
@@ -107,6 +113,7 @@ function writeInstructions(res: http.ServerResponse, i: HTTPResponseInstructions
       : JSON.stringify(i.body ?? {}, null, 2);
   res.writeHead(i.status, {
     "content-type": i.isHtml ? "text/html" : "application/json",
+    ...CORS_HEADERS,
     ...i.headers,
   });
   res.end(body ?? "");
@@ -177,6 +184,11 @@ export async function buildAppraisalServer(
     try {
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
       const method = req.method ?? "GET";
+
+      if (method === "OPTIONS") {
+        res.writeHead(204, CORS_HEADERS);
+        return res.end();
+      }
 
       if (method === "GET" && url.pathname === "/healthz") {
         return send(res, 200, {}, { ok: true, service: "sub-rosa-appraisal" });
