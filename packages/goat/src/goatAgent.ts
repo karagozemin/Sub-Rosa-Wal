@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import { commitment, toHex } from "@sub-rosa/tlock";
 
-import { createGoatAgentSession } from "./goatClient.js";
+import { createGoatAgentSession, getGoatIntegrationStatus } from "./goatClient.js";
 import {
   goatAgentDecisionRequestSchema,
   goatAgentDecisionSchema,
@@ -102,7 +102,9 @@ export function generateAgentDecision(
   config: GoatIntegrationConfig = {},
 ): GoatAgentDecision {
   const parsed = goatAgentDecisionRequestSchema.parse(request);
-  const session = createGoatAgentSession(config);
+  const goatStatus = getGoatIntegrationStatus(config);
+  const sessionStatus =
+    goatStatus.mode === "live" ? createGoatAgentSession(config).status : goatStatus;
   const { bid, confidence, deadlinePressure } = scoreDecision(parsed);
   const sealed = generateSealedBid(parsed);
   const shouldParticipate = bid > 0 && confidence >= 0.55;
@@ -112,7 +114,7 @@ export function generateAgentDecision(
     deadlinePressure < 120
       ? "Commit deadline is close; prefer skipping unless the round is operationally ready."
       : "Commit window appears usable for a sealed bid workflow.",
-    session.status.mode === "live"
+    sessionStatus.mode === "live"
       ? "GOAT AgentKit live mode is enabled for tool execution."
       : "Local deterministic decision mode; live GOAT credentials are not active.",
   ];
@@ -130,13 +132,13 @@ export function generateAgentDecision(
     riskNotes,
     commitmentPayload: sealed.commitmentPayload,
     goat: {
-      mode: session.status.mode,
+      mode: sessionStatus.mode,
       agentkit: {
-        package: session.status.packageName,
-        available: session.status.available,
-        tools: session.status.tools,
+        package: sessionStatus.packageName,
+        available: sessionStatus.available,
+        tools: sessionStatus.tools,
       },
-      requiresCredentials: session.status.mode !== "live",
+      requiresCredentials: sessionStatus.mode !== "live",
     },
   };
   return verifyAgentOutput(decision);
